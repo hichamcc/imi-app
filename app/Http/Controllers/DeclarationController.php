@@ -1,0 +1,298 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Services\DeclarationService;
+use App\Services\DriverService;
+use App\Services\TruckService;
+use Illuminate\Http\Request;
+
+class DeclarationController extends Controller
+{
+    protected DeclarationService $declarationService;
+    protected DriverService $driverService;
+    protected TruckService $truckService;
+
+    public function __construct(DeclarationService $declarationService, DriverService $driverService, TruckService $truckService)
+    {
+        $this->declarationService = $declarationService;
+        $this->driverService = $driverService;
+        $this->truckService = $truckService;
+    }
+
+    /**
+     * Display a listing of declarations
+     */
+    public function index(Request $request)
+    {
+        $limit = $request->get('limit', 50);
+        $startKey = $request->get('startKey');
+        $status = $request->get('status');
+        $postingCountry = $request->get('postingCountry');
+        $driverId = $request->get('driverId');
+        $endDateFrom = $request->get('endDateFrom');
+        $endDateTo = $request->get('endDateTo');
+
+        $filters = [];
+        if ($status) {
+            $filters['status'] = $status;
+        }
+        if ($postingCountry) {
+            $filters['postingCountry'] = $postingCountry;
+        }
+        if ($driverId) {
+            $filters['driverId'] = $driverId;
+        }
+        if ($endDateFrom) {
+            $filters['endDateFrom'] = $endDateFrom;
+        }
+        if ($endDateTo) {
+            $filters['endDateTo'] = $endDateTo;
+        }
+
+        try {
+            $declarations = $this->declarationService->getDeclarationsPaginated($limit, $startKey, $filters);
+
+            return view('declarations.index', compact(
+                'declarations',
+                'status',
+                'postingCountry',
+                'driverId',
+                'endDateFrom',
+                'endDateTo',
+                'limit',
+                'startKey'
+            ));
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Failed to load declarations: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show the form for creating a new declaration
+     */
+    public function create()
+    {
+        try {
+            // Get drivers for the dropdown
+            $drivers = $this->driverService->getDriversPaginated(250);
+
+            // Get available trucks for plate numbers
+            $trucks = $this->truckService->getAvailableTrucks();
+
+            return view('declarations.create', [
+                'drivers' => $drivers['items'] ?? [],
+                'trucks' => $trucks,
+                'countries' => DeclarationService::getPostingCountries(),
+                'operationTypes' => DeclarationService::getOperationTypes(),
+                'transportTypes' => DeclarationService::getTransportTypes()
+            ]);
+        } catch (\Exception $e) {
+            return redirect()->route('declarations.index')->with('error', 'Failed to load create form: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Store a newly created declaration
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'declarationPostingCountry' => 'required|string|size:2',
+            'declarationStartDate' => 'required|date|date_format:Y-m-d',
+            'declarationEndDate' => 'required|date|date_format:Y-m-d|after:declarationStartDate',
+            'declarationOperationType' => 'required|array|min:1|max:2',
+            'declarationOperationType.*' => 'string|in:CABOTAGE_OPERATIONS,INTERNATIONAL_CARRIAGE',
+            'declarationTransportType' => 'required|array|min:1|max:2',
+            'declarationTransportType.*' => 'string|in:CARRIAGE_OF_GOODS,CARRIAGE_OF_PASSENGERS',
+            'declarationVehiclePlateNumber' => 'required|array|min:1',
+            'declarationVehiclePlateNumber.*' => 'string|max:20',
+            'driverId' => 'required|string',
+            'otherContactAsTransportManager' => 'boolean',
+            'otherContactFirstName' => 'nullable|string|max:255',
+            'otherContactLastName' => 'nullable|string|max:255',
+            'otherContactEmail' => 'nullable|email|max:255',
+            'otherContactPhone' => 'nullable|string|max:20',
+        ]);
+
+        // Clean up array values
+        $validated['declarationVehiclePlateNumber'] = array_filter($validated['declarationVehiclePlateNumber']);
+
+        try {
+            $declaration = $this->declarationService->createDeclaration($validated);
+            return redirect()->route('declarations.show', $declaration['declarationId'])
+                ->with('success', 'Declaration created successfully!');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Failed to create declaration: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Display the specified declaration
+     */
+    public function show(string $id)
+    {
+        try {
+            $declaration = $this->declarationService->getDeclaration($id);
+            return view('declarations.show', compact('declaration'));
+        } catch (\Exception $e) {
+            return redirect()->route('declarations.index')
+                ->with('error', 'Failed to load declaration: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show the form for editing the specified declaration
+     */
+    public function edit(string $id)
+    {
+        try {
+            $declaration = $this->declarationService->getDeclaration($id);
+
+            // Check if declaration can be edited (only DRAFT status)
+            if (($declaration['declarationStatus'] ?? '') !== 'DRAFT') {
+                return redirect()->route('declarations.show', $id)
+                    ->with('error', 'Only draft declarations can be edited.');
+            }
+
+            // Get drivers for the dropdown
+            $drivers = $this->driverService->getDriversPaginated(250);
+
+            // Get available trucks for plate numbers
+            $trucks = $this->truckService->getAvailableTrucks();
+
+            return view('declarations.edit', [
+                'declaration' => $declaration,
+                'drivers' => $drivers['items'] ?? [],
+                'trucks' => $trucks,
+                'countries' => DeclarationService::getPostingCountries(),
+                'operationTypes' => DeclarationService::getOperationTypes(),
+                'transportTypes' => DeclarationService::getTransportTypes()
+            ]);
+        } catch (\Exception $e) {
+            return redirect()->route('declarations.index')
+                ->with('error', 'Failed to load declaration: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Update the specified declaration
+     */
+    public function update(Request $request, string $id)
+    {
+        $validated = $request->validate([
+            'declarationPostingCountry' => 'required|string|size:2',
+            'declarationStartDate' => 'required|date|date_format:Y-m-d',
+            'declarationEndDate' => 'required|date|date_format:Y-m-d|after:declarationStartDate',
+            'declarationOperationType' => 'required|array|min:1|max:2',
+            'declarationOperationType.*' => 'string|in:CABOTAGE_OPERATIONS,INTERNATIONAL_CARRIAGE',
+            'declarationTransportType' => 'required|array|min:1|max:2',
+            'declarationTransportType.*' => 'string|in:CARRIAGE_OF_GOODS,CARRIAGE_OF_PASSENGERS',
+            'declarationVehiclePlateNumber' => 'required|array|min:1',
+            'declarationVehiclePlateNumber.*' => 'string|max:20',
+            'driverId' => 'required|string',
+            'otherContactAsTransportManager' => 'boolean',
+            'otherContactFirstName' => 'nullable|string|max:255',
+            'otherContactLastName' => 'nullable|string|max:255',
+            'otherContactEmail' => 'nullable|email|max:255',
+            'otherContactPhone' => 'nullable|string|max:20',
+        ]);
+
+        // Clean up array values
+        $validated['declarationVehiclePlateNumber'] = array_filter($validated['declarationVehiclePlateNumber']);
+
+        try {
+            $declaration = $this->declarationService->updateDeclaration($id, $validated);
+            return redirect()->route('declarations.show', $id)
+                ->with('success', 'Declaration updated successfully!');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Failed to update declaration: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Remove the specified declaration
+     */
+    public function destroy(string $id)
+    {
+        try {
+            // First get the declaration to check its status
+            $declaration = $this->declarationService->getDeclaration($id);
+
+            if (($declaration['declarationStatus'] ?? '') !== 'DRAFT') {
+                return redirect()->back()
+                    ->with('error', 'Only draft declarations can be deleted.');
+            }
+
+            $this->declarationService->deleteDeclaration($id);
+            return redirect()->route('declarations.index')
+                ->with('success', 'Declaration deleted successfully!');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Failed to delete declaration: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Submit a declaration
+     */
+    public function submit(string $id)
+    {
+        try {
+            // First get the declaration to check its status
+            $declaration = $this->declarationService->getDeclaration($id);
+
+            if (($declaration['declarationStatus'] ?? '') !== 'DRAFT') {
+                return redirect()->back()
+                    ->with('error', 'Only draft declarations can be submitted.');
+            }
+
+            $this->declarationService->submitDeclaration($id);
+            return redirect()->route('declarations.show', $id)
+                ->with('success', 'Declaration submitted successfully!');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Failed to submit declaration: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Withdraw a declaration
+     */
+    public function withdraw(string $id)
+    {
+        try {
+            // First get the declaration to check its status
+            $declaration = $this->declarationService->getDeclaration($id);
+
+            if (($declaration['declarationStatus'] ?? '') !== 'SUBMITTED') {
+                return redirect()->back()
+                    ->with('error', 'Only submitted declarations can be withdrawn.');
+            }
+
+            $this->declarationService->withdrawDeclaration($id);
+            return redirect()->route('declarations.show', $id)
+                ->with('success', 'Declaration withdrawn successfully!');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Failed to withdraw declaration: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Get truck plates for a specific driver (AJAX endpoint)
+     */
+    public function getDriverTruckPlates(string $driverId)
+    {
+        try {
+            $plates = $this->truckService->getTruckPlatesForDriver($driverId);
+            return response()->json(['plates' => $plates]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to get truck plates'], 500);
+        }
+    }
+}
