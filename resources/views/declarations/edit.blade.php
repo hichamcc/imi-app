@@ -130,8 +130,9 @@
                             id="plate-container">
                                 <template x-for="(plate, index) in plates" :key="index">
                                     <div class="flex items-center space-x-2">
-                                        <select ::name="`declarationVehiclePlateNumber[${index}]`"
+                                        <select x-bind:name="`declarationVehiclePlateNumber[${index}]`"
                                                 x-model="plates[index]"
+                                                x-bind:required="index === 0"
                                                 class="flex-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-700 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                                             <option value="">{{ __('Select Vehicle Plate') }}</option>
                                             @foreach($trucks as $truck)

@@ -139,7 +139,18 @@ class PostingApiService
         try {
             $response = $this->client->delete($endpoint);
 
-            $responseData = json_decode($response->getBody()->getContents(), true);
+            $responseBody = $response->getBody()->getContents();
+
+            // Handle empty response body (common with DELETE requests)
+            if (empty($responseBody)) {
+                $responseData = ['success' => true, 'status' => $response->getStatusCode()];
+            } else {
+                $responseData = json_decode($responseBody, true);
+                // If JSON decode fails, return success response
+                if ($responseData === null) {
+                    $responseData = ['success' => true, 'status' => $response->getStatusCode()];
+                }
+            }
 
             // Clear related cache entries
             $this->clearRelatedCache($endpoint);

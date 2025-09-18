@@ -12,10 +12,12 @@ class Truck extends Model
         'plate',
         'capacity_tons',
         'status',
+        'countries',
     ];
 
     protected $casts = [
         'capacity_tons' => 'decimal:2',
+        'countries' => 'array',
     ];
 
     public function assignments(): HasMany
@@ -52,5 +54,15 @@ class Truck extends Model
             'Maintenance' => 'Maintenance',
             'Retired' => 'Retired',
         ];
+    }
+
+    public function getCountryNamesAttribute(): array
+    {
+        if (!$this->countries) {
+            return [];
+        }
+
+        $allCountries = \App\Services\DeclarationService::getPostingCountries();
+        return array_intersect_key($allCountries, array_flip($this->countries));
     }
 }

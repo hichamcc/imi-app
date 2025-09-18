@@ -97,6 +97,21 @@ class DeclarationController extends Controller
      */
     public function store(Request $request)
     {
+
+        // Pre-validate and clean vehicle plate numbers
+        $vehiclePlates = $request->input('declarationVehiclePlateNumber', []);
+        $vehiclePlates = array_filter($vehiclePlates, function($plate) {
+            return !empty(trim($plate));
+        });
+        $vehiclePlates = array_values($vehiclePlates); // Re-index array
+
+        // Check if we have at least one plate after filtering
+        if (empty($vehiclePlates)) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['declarationVehiclePlateNumber' => 'At least one vehicle plate number is required.']);
+        }
+
         $validated = $request->validate([
             'declarationPostingCountry' => 'required|string|size:2',
             'declarationStartDate' => 'required|date|date_format:Y-m-d',
@@ -105,18 +120,19 @@ class DeclarationController extends Controller
             'declarationOperationType.*' => 'string|in:CABOTAGE_OPERATIONS,INTERNATIONAL_CARRIAGE',
             'declarationTransportType' => 'required|array|min:1|max:2',
             'declarationTransportType.*' => 'string|in:CARRIAGE_OF_GOODS,CARRIAGE_OF_PASSENGERS',
-            'declarationVehiclePlateNumber' => 'required|array|min:1',
-            'declarationVehiclePlateNumber.*' => 'string|max:20',
             'driverId' => 'required|string',
-            'otherContactAsTransportManager' => 'boolean',
+            'otherContactAsTransportManager' => 'required|boolean',
             'otherContactFirstName' => 'nullable|string|max:255',
             'otherContactLastName' => 'nullable|string|max:255',
             'otherContactEmail' => 'nullable|email|max:255',
             'otherContactPhone' => 'nullable|string|max:20',
         ]);
 
-        // Clean up array values
-        $validated['declarationVehiclePlateNumber'] = array_filter($validated['declarationVehiclePlateNumber']);
+        // Use the cleaned vehicle plates
+        $validated['declarationVehiclePlateNumber'] = $vehiclePlates;
+
+        // Ensure boolean conversion for the API
+        $validated['otherContactAsTransportManager'] = (bool) $validated['otherContactAsTransportManager'];
 
         try {
             $declaration = $this->declarationService->createDeclaration($validated);

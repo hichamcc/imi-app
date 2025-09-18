@@ -48,7 +48,8 @@ class TruckController extends Controller
     public function create()
     {
         $statuses = Truck::getStatuses();
-        return view('trucks.create', compact('statuses'));
+        $countries = \App\Services\DeclarationService::getPostingCountries();
+        return view('trucks.create', compact('statuses', 'countries'));
     }
 
     /**
@@ -61,6 +62,8 @@ class TruckController extends Controller
             'plate' => 'required|string|max:20|unique:trucks,plate',
             'capacity_tons' => 'required|numeric|min:0.01|max:999999.99',
             'status' => 'required|in:Available,In-Transit,Maintenance,Retired',
+            'countries' => 'nullable|array',
+            'countries.*' => 'in:' . implode(',', array_keys(\App\Services\DeclarationService::getPostingCountries())),
         ]);
 
         try {
@@ -101,7 +104,8 @@ class TruckController extends Controller
         try {
             $truck = $this->truckService->getTruck($id);
             $statuses = Truck::getStatuses();
-            return view('trucks.edit', compact('truck', 'statuses'));
+            $countries = \App\Services\DeclarationService::getPostingCountries();
+            return view('trucks.edit', compact('truck', 'statuses', 'countries'));
         } catch (\Exception $e) {
             return redirect()->route('trucks.index')
                 ->with('error', 'Failed to load truck: ' . $e->getMessage());
@@ -118,6 +122,8 @@ class TruckController extends Controller
             'plate' => 'required|string|max:20|unique:trucks,plate,' . $id,
             'capacity_tons' => 'required|numeric|min:0.01|max:999999.99',
             'status' => 'required|in:Available,In-Transit,Maintenance,Retired',
+            'countries' => 'nullable|array',
+            'countries.*' => 'in:' . implode(',', array_keys(\App\Services\DeclarationService::getPostingCountries())),
         ]);
 
         try {

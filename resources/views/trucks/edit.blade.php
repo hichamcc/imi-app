@@ -78,6 +78,32 @@
                     </div>
                 </div>
 
+                <!-- Countries -->
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ __('Operating Countries') }}</h3>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            {{ __('Select countries where this truck operates') }}
+                        </label>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                            @foreach($countries as $code => $name)
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="countries[]" value="{{ $code }}"
+                                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                           {{ in_array($code, old('countries', $truck->countries ?? [])) ? 'checked' : '' }}>
+                                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ __($name) }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+                        @error('countries')
+                            <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                        @error('countries.*')
+                            <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+
                 <!-- Current Assignments Warning -->
                 @if($truck->activeAssignments->count() > 0)
                     <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">

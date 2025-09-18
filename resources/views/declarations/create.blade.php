@@ -108,7 +108,7 @@
                         <x-field>
                             <x-label for="vehiclePlate1">{{ __('Vehicle Plate Numbers') }} <span class="text-red-500">*</span></x-label>
                             <div class="space-y-2" x-data="{
-                                plates: ['{{ old('declarationVehiclePlateNumber.0', '') }}'],
+                                plates: {{ old('declarationVehiclePlateNumber') ? json_encode(old('declarationVehiclePlateNumber')) : json_encode(['']) }},
                                 handleAutoPopulate(event) {
                                     this.plates = event.detail.plates;
                                 }
@@ -117,8 +117,9 @@
                             id="plate-container">
                                 <template x-for="(plate, index) in plates" :key="index">
                                     <div class="flex items-center space-x-2">
-                                        <select ::name="`declarationVehiclePlateNumber[${index}]`"
+                                        <select x-bind:name="`declarationVehiclePlateNumber[${index}]`"
                                                 x-model="plates[index]"
+                                                x-bind:required="index === 0"
                                                 class="flex-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-700 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                                             <option value="">{{ __('Select Vehicle Plate') }}</option>
                                             @foreach($trucks as $truck)
@@ -159,6 +160,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <!-- Transport Manager Checkbox -->
                         <x-field class="md:col-span-2">
+                            <input type="hidden" name="otherContactAsTransportManager" value="0">
                             <label class="flex items-center">
                                 <input type="checkbox"
                                        name="otherContactAsTransportManager"

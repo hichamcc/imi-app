@@ -35,6 +35,25 @@
                     <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ $truck->created_at->format('M j, Y') }}</p>
                 </div>
             </div>
+
+            <!-- Operating Countries -->
+            @if($truck->countries && count($truck->countries) > 0)
+                <div class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{{ __('Operating Countries') }}</label>
+                    <div class="flex flex-wrap gap-2">
+                        @foreach($truck->country_names as $code => $name)
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                {{ $name }}
+                            </span>
+                        @endforeach
+                    </div>
+                </div>
+            @else
+                <div class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{{ __('Operating Countries') }}</label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('No operating countries specified') }}</p>
+                </div>
+            @endif
         </div>
 
         <!-- Driver Assignments -->

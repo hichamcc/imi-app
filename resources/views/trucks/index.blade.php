@@ -60,6 +60,9 @@
                                     {{ __('Status') }}
                                 </th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    {{ __('Operating Countries') }}
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     {{ __('Assigned Drivers') }}
                                 </th>
                                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -92,6 +95,24 @@
                                         <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {{ $truck->status_color }}">
                                             {{ $truck->status }}
                                         </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        @if($truck->countries && count($truck->countries) > 0)
+                                            <div class="flex flex-wrap gap-1">
+                                                @foreach(array_slice($truck->country_names, 0, 3) as $name)
+                                                    <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                                        {{ $name }}
+                                                    </span>
+                                                @endforeach
+                                                @if(count($truck->country_names) > 3)
+                                                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                                                        +{{ count($truck->country_names) - 3 }} more
+                                                    </span>
+                                                @endif
+                                            </div>
+                                        @else
+                                            <span class="text-sm text-gray-500 dark:text-gray-400">{{ __('None specified') }}</span>
+                                        @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         @if($truck->activeAssignments->count() > 0)
