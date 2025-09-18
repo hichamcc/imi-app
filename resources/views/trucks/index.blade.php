@@ -99,11 +99,16 @@
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         @if($truck->countries && count($truck->countries) > 0)
                                             <div class="flex flex-wrap gap-1">
-                                                @foreach($truck->countries as $countryCode)
+                                                @foreach(array_slice($truck->countries, 0, 3) as $countryCode)
                                                     <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
                                                         {{ $countryCode }}
                                                     </span>
                                                 @endforeach
+                                                @if(count($truck->countries) > 3)
+                                                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                                                        +{{ count($truck->countries) - 3 }} more
+                                                    </span>
+                                                @endif
                                             </div>
                                         @else
                                             <span class="text-sm text-gray-500 dark:text-gray-400">{{ __('None specified') }}</span>
