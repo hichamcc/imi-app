@@ -41,9 +41,9 @@
                 <div class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{{ __('Operating Countries') }}</label>
                     <div class="flex flex-wrap gap-2">
-                        @foreach($truck->country_names as $code => $name)
+                        @foreach($truck->countries as $countryCode)
                             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-                                {{ $name }}
+                                {{ $countryCode }}
                             </span>
                         @endforeach
                     </div>
