@@ -32,14 +32,6 @@
                     </x-navlist.item>
                 </x-navlist.group>
 
-                <x-navlist.group :heading="__('Reports')">
-                    <x-navlist.item before="phosphor-chart-bar" href="#" :current="false">
-                        {{ __('Analytics') }}
-                    </x-navlist.item>
-                    <x-navlist.item before="phosphor-download-simple" href="#" :current="false">
-                        {{ __('Export Data') }}
-                    </x-navlist.item>
-                </x-navlist.group>
             </x-navlist>
 
             <x-spacer />

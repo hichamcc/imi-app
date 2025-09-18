@@ -39,11 +39,6 @@
                                     Log in
                                 </a>
 
-                                @if (Route::has('register'))
-                                    <a href="{{ route('register') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                                        Get Started
-                                    </a>
-                                @endif
                             @endauth
                         @endif
                     </div>
@@ -69,11 +64,8 @@
                                     Go to Dashboard
                                 </a>
                             @else
-                                <a href="{{ route('register') }}" class="bg-blue-600 px-6 py-3 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">
-                                    Get Started
-                                </a>
-                                <a href="{{ route('login') }}" class="text-gray-900 dark:text-white font-semibold hover:text-blue-600 transition-colors">
-                                    Sign in <span aria-hidden="true">→</span>
+                                <a href="{{ route('login') }}" class="bg-blue-600 px-6 py-3 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                                    Sign in
                                 </a>
                             @endauth
                         @endif
