@@ -34,18 +34,29 @@
                             <x-error for="driverId" />
                         </x-field>
 
-                        <!-- Posting Country -->
-                        <x-field>
-                            <x-label for="declarationPostingCountry">{{ __('Posting Country') }} <span class="text-red-500">*</span></x-label>
-                            <x-select name="declarationPostingCountry" id="declarationPostingCountry" required>
-                                <option value="">{{ __('Select Country') }}</option>
+                        <!-- Posting Countries (Multiple Selection) -->
+                        <x-field class="md:col-span-2">
+                            <div class="flex items-center justify-between">
+                                <x-label>{{ __('Posting Countries') }} <span class="text-red-500">*</span></x-label>
+                                <div class="flex space-x-2">
+                                    <button type="button" onclick="selectAllCountries()" class="text-xs text-blue-600 hover:text-blue-800">{{ __('Select All') }}</button>
+                                    <button type="button" onclick="clearAllCountries()" class="text-xs text-gray-600 hover:text-gray-800">{{ __('Clear All') }}</button>
+                                </div>
+                            </div>
+                            <div class="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-4" id="countries-container">
                                 @foreach($countries as $code => $name)
-                                    <option value="{{ $code }}" {{ old('declarationPostingCountry') == $code ? 'selected' : '' }}>
-                                        {{ __($name) }}
-                                    </option>
+                                    <label class="flex items-center">
+                                        <input type="checkbox"
+                                               name="declarationPostingCountries[]"
+                                               value="{{ $code }}"
+                                               class="country-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                               {{ in_array($code, old('declarationPostingCountries', [])) ? 'checked' : '' }}>
+                                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ $code }} - {{ __($name) }}</span>
+                                    </label>
                                 @endforeach
-                            </x-select>
-                            <x-error for="declarationPostingCountry" />
+                            </div>
+                            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ __('Select one or more countries. A separate declaration will be created for each selected country.') }}</p>
+                            <x-error for="declarationPostingCountries" />
                         </x-field>
 
                         <!-- Start Date -->
@@ -298,6 +309,21 @@
             setTimeout(() => {
                 document.body.removeChild(notification);
             }, 3000);
+        }
+
+        // Country selection functions
+        function selectAllCountries() {
+            const checkboxes = document.querySelectorAll('.country-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+        }
+
+        function clearAllCountries() {
+            const checkboxes = document.querySelectorAll('.country-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
         }
     </script>
 </x-layouts.app>

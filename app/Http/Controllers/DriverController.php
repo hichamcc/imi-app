@@ -42,6 +42,14 @@ class DriverController extends Controller
 
         try {
             $drivers = $this->driverService->getDriversPaginated($limit, $startKey, $filters);
+
+            // Add active declaration countries to drivers
+            if (isset($drivers['items'])) {
+                $drivers['items'] = $this->driverService->getDriversWithActiveCountries($drivers['items']);
+            } elseif (is_array($drivers)) {
+                $drivers = $this->driverService->getDriversWithActiveCountries($drivers);
+            }
+
             return view('drivers.index', compact('drivers', 'term', 'limit', 'startKey', 'withActiveDeclarations', 'byLastName', 'dateOfBirth'));
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to load drivers: ' . $e->getMessage());

@@ -80,4 +80,100 @@ class DriverService
 
         return $this->getDrivers($params);
     }
+
+    /**
+     * Get active declaration countries for drivers
+     */
+    public function getDriversWithActiveCountries(array $drivers): array
+    {
+        // Get active declarations
+        $declarationEndpoint = config('posting.endpoints.declarations');
+        try {
+            // First, try to get all declarations without status filter to see what we get
+            $declarations = $this->apiService->get($declarationEndpoint, [
+                'limit' => 250
+            ]);
+
+            $declarationsData = $declarations['items'] ?? $declarations ?? [];
+
+
+            // Group declarations by driver ID and collect unique countries
+            $driverCountries = [];
+
+            foreach ($declarationsData as $declaration) {
+                $driverFullName = $declaration['driverLatinFullName'] ?? null;
+                $country = $declaration['declarationPostingCountry'] ?? null;
+                $status = $declaration['declarationStatus'] ?? null;
+                $declarationDateOfBirth = $declaration['driverDateOfBirth'] ?? null;
+
+                // Only include submitted declarations
+                if ($status === 'SUBMITTED' && $driverFullName && $country) {
+                    // Find driver by full name match with additional criteria to handle duplicates
+                    $potentialMatches = [];
+
+                    foreach ($drivers as $driver) {
+                        $driverName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
+                        if ($driverName === $driverFullName) {
+                            $potentialMatches[] = $driver;
+                        }
+                    }
+
+                    // If we have multiple drivers with same name, try to match by date of birth
+                    $matchedDriver = null;
+                    if (count($potentialMatches) === 1) {
+                        $matchedDriver = $potentialMatches[0];
+                    } elseif (count($potentialMatches) > 1) {
+                        if ($declarationDateOfBirth) {
+                            // Try to match by date of birth for better accuracy
+                            foreach ($potentialMatches as $driver) {
+                                if (($driver['driverDateOfBirth'] ?? null) === $declarationDateOfBirth) {
+                                    $matchedDriver = $driver;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // If no date of birth match, assign to first match as fallback
+                        if (!$matchedDriver) {
+                            $matchedDriver = $potentialMatches[0];
+                        }
+                    }
+
+                    if ($matchedDriver) {
+                        $matchingDriverId = $matchedDriver['driverId'];
+                        if (!isset($driverCountries[$matchingDriverId])) {
+                            $driverCountries[$matchingDriverId] = [];
+                        }
+                        $driverCountries[$matchingDriverId][] = $country;
+                    }
+                }
+            }
+
+
+
+            // Remove duplicates and add to drivers
+            foreach ($drivers as &$driver) {
+                $driverId = $driver['driverId'] ?? null;
+                if ($driverId && isset($driverCountries[$driverId])) {
+                    $driver['activeCountries'] = array_unique($driverCountries[$driverId]);
+                } else {
+                    $driver['activeCountries'] = [];
+                }
+            }
+
+        } catch (\Exception $e) {
+            // Log the error for debugging
+            \Log::error('Failed to fetch declarations for countries', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // If declarations fetch fails, add empty countries to all drivers
+            foreach ($drivers as &$driver) {
+                $driver['activeCountries'] = [];
+            }
+        }
+
+        return $drivers;
+    }
 }

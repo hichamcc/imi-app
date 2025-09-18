@@ -113,7 +113,8 @@ class DeclarationController extends Controller
         }
 
         $validated = $request->validate([
-            'declarationPostingCountry' => 'required|string|size:2',
+            'declarationPostingCountries' => 'required|array|min:1',
+            'declarationPostingCountries.*' => 'string|size:2',
             'declarationStartDate' => 'required|date|date_format:Y-m-d',
             'declarationEndDate' => 'required|date|date_format:Y-m-d|after:declarationStartDate',
             'declarationOperationType' => 'required|array|min:1|max:2',
@@ -134,14 +135,59 @@ class DeclarationController extends Controller
         // Ensure boolean conversion for the API
         $validated['otherContactAsTransportManager'] = (bool) $validated['otherContactAsTransportManager'];
 
+        $selectedCountries = $validated['declarationPostingCountries'];
+        $createdDeclarations = [];
+        $errors = [];
+
         try {
-            $declaration = $this->declarationService->createDeclaration($validated);
-            return redirect()->route('declarations.show', $declaration['declarationId'])
-                ->with('success', 'Declaration created successfully!');
+            // Create a separate declaration for each selected country
+            foreach ($selectedCountries as $country) {
+                try {
+                    $declarationData = $validated;
+                    $declarationData['declarationPostingCountry'] = $country;
+                    unset($declarationData['declarationPostingCountries']); // Remove the array field
+
+                    $declaration = $this->declarationService->createDeclaration($declarationData);
+                    $createdDeclarations[] = [
+                        'id' => $declaration['declarationId'],
+                        'country' => $country
+                    ];
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to create declaration for {$country}: " . $e->getMessage();
+                }
+            }
+
+            // Determine success message and redirect
+            if (count($createdDeclarations) > 0) {
+                $successCount = count($createdDeclarations);
+                $errorCount = count($errors);
+
+                if ($errorCount === 0) {
+                    $message = "Successfully created {$successCount} declaration(s) for the selected countries.";
+                    $messageType = 'success';
+                } else {
+                    $message = "Created {$successCount} declaration(s) successfully, but {$errorCount} failed. " . implode(' ', $errors);
+                    $messageType = 'warning';
+                }
+
+                // Redirect to the first created declaration if only one, otherwise to declarations list
+                if (count($createdDeclarations) === 1) {
+                    return redirect()->route('declarations.show', $createdDeclarations[0]['id'])
+                        ->with($messageType, $message);
+                } else {
+                    return redirect()->route('declarations.index')
+                        ->with($messageType, $message);
+                }
+            } else {
+                // All declarations failed to create
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'Failed to create any declarations: ' . implode(' ', $errors));
+            }
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Failed to create declaration: ' . $e->getMessage());
+                ->with('error', 'Failed to create declarations: ' . $e->getMessage());
         }
     }
 
