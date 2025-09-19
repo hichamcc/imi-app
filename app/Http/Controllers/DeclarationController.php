@@ -98,23 +98,12 @@ class DeclarationController extends Controller
     public function store(Request $request)
     {
 
-        // Pre-validate and clean vehicle plate numbers
-        $vehiclePlates = $request->input('declarationVehiclePlateNumber', []);
-        $vehiclePlates = array_filter($vehiclePlates, function($plate) {
-            return !empty(trim($plate));
-        });
-        $vehiclePlates = array_values($vehiclePlates); // Re-index array
-
-        // Check if we have at least one plate after filtering
-        if (empty($vehiclePlates)) {
-            return redirect()->back()
-                ->withInput()
-                ->withErrors(['declarationVehiclePlateNumber' => 'At least one vehicle plate number is required.']);
-        }
 
         $validated = $request->validate([
             'declarationPostingCountries' => 'required|array|min:1',
             'declarationPostingCountries.*' => 'string|size:2',
+            'declarationVehiclePlateNumber' => 'required|array|min:1',
+            'declarationVehiclePlateNumber.*' => 'required|string|max:20',
             'declarationStartDate' => 'required|date|date_format:Y-m-d',
             'declarationEndDate' => 'required|date|date_format:Y-m-d|after:declarationStartDate',
             'declarationOperationType' => 'required|array|min:1|max:2',
@@ -129,8 +118,6 @@ class DeclarationController extends Controller
             'otherContactPhone' => 'nullable|string|max:20',
         ]);
 
-        // Use the cleaned vehicle plates
-        $validated['declarationVehiclePlateNumber'] = $vehiclePlates;
 
         // Ensure boolean conversion for the API
         $validated['otherContactAsTransportManager'] = (bool) $validated['otherContactAsTransportManager'];
@@ -355,6 +342,59 @@ class DeclarationController extends Controller
             return response()->json(['plates' => $plates]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to get truck plates'], 500);
+        }
+    }
+
+    /**
+     * Print declaration (generate PDF)
+     */
+    public function print(Request $request, string $id)
+    {
+        $validated = $request->validate([
+            'declarationLanguage' => 'required|string|in:bg,cs,da,de,et,el,en,es,fr,fi,ga,hr,hu,it,lv,lt,mt,nl,no,pl,pt,ro,sk,sl,sv'
+        ]);
+
+        try {
+            $result = $this->declarationService->printDeclaration($id, $validated['declarationLanguage']);
+
+            // The API returns the direct S3 URL as a string
+            $pdfUrl = is_array($result) ? ($result['url'] ?? $result['data'] ?? '') : $result;
+
+            return response()->json([
+                'success' => true,
+                'url' => $pdfUrl,
+                'message' => 'PDF generated successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate PDF: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Email declaration
+     */
+    public function email(Request $request, string $id)
+    {
+        $validated = $request->validate([
+            'emailAddress' => 'required|email',
+            'declarationLanguage' => 'required|string|in:bg,cs,da,de,et,el,en,es,fr,fi,ga,hr,hu,it,lv,lt,mt,nl,no,pl,pt,ro,sk,sl,sv'
+        ]);
+
+        try {
+            $this->declarationService->emailDeclaration($id, $validated['emailAddress'], $validated['declarationLanguage']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Declaration sent successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send email: ' . $e->getMessage()
+            ], 500);
         }
     }
 }

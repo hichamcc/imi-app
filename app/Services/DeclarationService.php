@@ -84,21 +84,32 @@ class DeclarationService
     }
 
     /**
-     * Send declaration email
+     * Email declaration
      */
-    public function sendDeclarationEmail(int $declarationId, array $emailData = []): array
+    public function emailDeclaration(string $declarationId, string $emailAddress, string $language): array
     {
-        $endpoint = config('posting.endpoints.declarations') . '/' . $declarationId . '/email';
-        return $this->apiService->post($endpoint, $emailData);
+        $endpoint = "/declarations/{$declarationId}/email";
+
+        $data = [
+            'emailAddress' => $emailAddress,
+            'declarationLanguage' => $language
+        ];
+
+        return $this->apiService->post($endpoint, $data);
     }
 
     /**
-     * Print declaration
+     * Print declaration (generate PDF)
      */
-    public function printDeclaration(int $declarationId): array
+    public function printDeclaration(string $declarationId, string $language): array
     {
-        $endpoint = config('posting.endpoints.declarations') . '/' . $declarationId . '/print';
-        return $this->apiService->post($endpoint);
+        $endpoint = "/declarations/{$declarationId}/print";
+
+        $data = [
+            'declarationLanguage' => $language
+        ];
+
+        return $this->apiService->post($endpoint, $data);
     }
 
     /**
@@ -257,4 +268,5 @@ class DeclarationService
             'EXPIRED' => 'Expired'
         ];
     }
+
 }

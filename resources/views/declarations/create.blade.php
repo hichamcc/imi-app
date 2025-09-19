@@ -115,51 +115,28 @@
                             <x-error for="declarationTransportType" />
                         </x-field>
 
-                        <!-- Vehicle Plate Numbers -->
-                        <x-field>
-                            <x-label for="vehiclePlate1">{{ __('Vehicle Plate Numbers') }} <span class="text-red-500">*</span></x-label>
-                            <div class="space-y-2" x-data="{
-                                plates: {{ old('declarationVehiclePlateNumber') ? json_encode(old('declarationVehiclePlateNumber')) : json_encode(['']) }},
-                                handleAutoPopulate(event) {
-                                    this.plates = event.detail.plates;
-                                }
-                            }"
-                            @auto-populate-plates="handleAutoPopulate"
-                            id="plate-container">
-                                <template x-for="(plate, index) in plates" :key="index">
-                                    <div class="flex items-center space-x-2">
-                                        <select x-bind:name="`declarationVehiclePlateNumber[${index}]`"
-                                                x-model="plates[index]"
-                                                x-bind:required="index === 0"
-                                                class="flex-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-700 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                                            <option value="">{{ __('Select Vehicle Plate') }}</option>
-                                            @foreach($trucks as $truck)
-                                                <option value="{{ $truck->plate }}">{{ $truck->plate }} - {{ $truck->name }}</option>
-                                            @endforeach
-                                        </select>
-                                        <button type="button"
-                                                x-show="plates.length > 1"
-                                                @click="plates.splice(index, 1)"
-                                                class="text-red-600 hover:text-red-800 px-2">
-                                            ✕
-                                        </button>
-                                    </div>
-                                </template>
+                        <!-- Vehicle Plate Numbers (Multiple Selection) -->
+                        <x-field class="md:col-span-2">
+                            <div class="flex items-center justify-between">
+                                <x-label>{{ __('Vehicle Plate Numbers') }} <span class="text-red-500">*</span></x-label>
                                 <div class="flex space-x-2">
-                                    <button type="button"
-                                            @click="plates.push('')"
-                                            class="text-blue-600 hover:text-blue-800 text-sm">
-                                        + {{ __('Add Another Vehicle') }}
-                                    </button>
-                                    <button type="button"
-                                            id="auto-populate-btn"
-                                            onclick="autoPopulatePlates()"
-                                            class="text-green-600 hover:text-green-800 text-sm"
-                                            style="display: none;">
-                                        🚛 {{ __('Auto-populate from assigned trucks') }}
-                                    </button>
+                                    <button type="button" onclick="selectAllPlates()" class="text-xs text-blue-600 hover:text-blue-800">{{ __('Select All') }}</button>
+                                    <button type="button" onclick="clearAllPlates()" class="text-xs text-gray-600 hover:text-gray-800">{{ __('Clear All') }}</button>
                                 </div>
                             </div>
+                            <div class="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-4" id="plates-container">
+                                @foreach($trucks as $truck)
+                                    <label class="flex items-center">
+                                        <input type="checkbox"
+                                               name="declarationVehiclePlateNumber[]"
+                                               value="{{ $truck->plate }}"
+                                               class="plate-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                               {{ in_array($truck->plate, old('declarationVehiclePlateNumber', [])) ? 'checked' : '' }}>
+                                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ $truck->plate }} - {{ $truck->name }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ __('Select one or more vehicle plates for this declaration.') }}</p>
                             <x-error for="declarationVehiclePlateNumber" />
                         </x-field>
                     </div>
@@ -226,91 +203,6 @@
     </div>
 
     <script>
-        let currentSelectedDriver = null;
-        let availableTruckPlates = [];
-
-        // Listen for driver selection changes
-        document.getElementById('driverId').addEventListener('change', function() {
-            const driverId = this.value;
-            const autoPopulateBtn = document.getElementById('auto-populate-btn');
-
-            if (driverId && driverId !== currentSelectedDriver) {
-                currentSelectedDriver = driverId;
-                fetchDriverTruckPlates(driverId);
-            } else {
-                currentSelectedDriver = null;
-                availableTruckPlates = [];
-                autoPopulateBtn.style.display = 'none';
-            }
-        });
-
-        function fetchDriverTruckPlates(driverId) {
-            fetch(`{{ url('declarations/driver') }}/${driverId}/truck-plates`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.plates && data.plates.length > 0) {
-                        availableTruckPlates = data.plates;
-                        document.getElementById('auto-populate-btn').style.display = 'inline-block';
-                    } else {
-                        availableTruckPlates = [];
-                        document.getElementById('auto-populate-btn').style.display = 'none';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching truck plates:', error);
-                    availableTruckPlates = [];
-                    document.getElementById('auto-populate-btn').style.display = 'none';
-                });
-        }
-
-        function autoPopulatePlates() {
-            if (availableTruckPlates.length === 0) {
-                alert('{{ __("No assigned trucks found for this driver.") }}');
-                return;
-            }
-
-            // Dispatch a custom event to trigger Alpine.js update
-            const plateContainer = document.getElementById('plate-container');
-
-            // Try to access Alpine component directly
-            try {
-                // Use Alpine.js event system to update the plates
-                plateContainer.dispatchEvent(new CustomEvent('auto-populate-plates', {
-                    detail: { plates: availableTruckPlates }
-                }));
-            } catch (error) {
-                console.error('Error with Alpine.js event:', error);
-
-                // Fallback: direct manipulation
-                const firstSelect = plateContainer.querySelector('select[name*="declarationVehiclePlateNumber"]');
-                if (firstSelect) {
-                    // Clear all existing values
-                    const allSelects = plateContainer.querySelectorAll('select[name*="declarationVehiclePlateNumber"]');
-                    allSelects.forEach(select => select.value = '');
-
-                    // Set the first plate
-                    firstSelect.value = availableTruckPlates[0] || '';
-
-                    // Trigger change events to notify Alpine.js
-                    firstSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }
-
-            // Show success message
-            const message = `{{ __("Auto-populated") }} ${availableTruckPlates.length} {{ __("truck plate(s) for selected driver.") }}`;
-
-            // Create a temporary notification
-            const notification = document.createElement('div');
-            notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-            notification.textContent = message;
-            document.body.appendChild(notification);
-
-            // Remove notification after 3 seconds
-            setTimeout(() => {
-                document.body.removeChild(notification);
-            }, 3000);
-        }
-
         // Country selection functions
         function selectAllCountries() {
             const checkboxes = document.querySelectorAll('.country-checkbox');
@@ -321,6 +213,21 @@
 
         function clearAllCountries() {
             const checkboxes = document.querySelectorAll('.country-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
+        }
+
+        // Plate selection functions
+        function selectAllPlates() {
+            const checkboxes = document.querySelectorAll('.plate-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+        }
+
+        function clearAllPlates() {
+            const checkboxes = document.querySelectorAll('.plate-checkbox');
             checkboxes.forEach(checkbox => {
                 checkbox.checked = false;
             });

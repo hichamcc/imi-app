@@ -7,6 +7,14 @@
                 <p class="text-gray-600 dark:text-gray-400">{{ __('Declaration') }} #{{ substr($declaration['declarationId'] ?? '', 0, 8) }}</p>
             </div>
             <div class="flex space-x-3">
+                <!-- Print and Email Actions -->
+                <button onclick="openPrintModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    📄 {{ __('Print') }}
+                </button>
+                <button onclick="openEmailModal()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    ✉️ {{ __('Email') }}
+                </button>
+
                 @if(($declaration['declarationStatus'] ?? '') === 'DRAFT')
                     <a href="{{ route('declarations.edit', $declaration['declarationId']) }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                         {{ __('Edit Declaration') }}
@@ -253,4 +261,284 @@
             </div>
         </div>
     </div>
+
+    <!-- Print Declaration Modal -->
+    <div id="printModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">{{ __('Print Declaration') }}</h3>
+                    <button onclick="closePrintModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <form id="printForm" class="space-y-4">
+                    @csrf
+                    <div>
+                        <label for="print_language" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            {{ __('Language') }} <span class="text-red-500">*</span>
+                        </label>
+                        <select name="declarationLanguage" id="print_language" required class="block w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-700 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            <option value="">{{ __('Select Language') }}</option>
+                            <option value="bg">{{ __('Bulgarian') }}</option>
+                            <option value="cs">{{ __('Czech') }}</option>
+                            <option value="da">{{ __('Danish') }}</option>
+                            <option value="de">{{ __('German') }}</option>
+                            <option value="et">{{ __('Estonian') }}</option>
+                            <option value="el">{{ __('Greek') }}</option>
+                            <option value="en">{{ __('English') }}</option>
+                            <option value="es">{{ __('Spanish') }}</option>
+                            <option value="fr">{{ __('French') }}</option>
+                            <option value="fi">{{ __('Finnish') }}</option>
+                            <option value="ga">{{ __('Irish') }}</option>
+                            <option value="hr">{{ __('Croatian') }}</option>
+                            <option value="hu">{{ __('Hungarian') }}</option>
+                            <option value="it">{{ __('Italian') }}</option>
+                            <option value="lv">{{ __('Latvian') }}</option>
+                            <option value="lt">{{ __('Lithuanian') }}</option>
+                            <option value="mt">{{ __('Maltese') }}</option>
+                            <option value="nl">{{ __('Dutch') }}</option>
+                            <option value="no">{{ __('Norwegian') }}</option>
+                            <option value="pl">{{ __('Polish') }}</option>
+                            <option value="pt">{{ __('Portuguese') }}</option>
+                            <option value="ro">{{ __('Romanian') }}</option>
+                            <option value="sk">{{ __('Slovak') }}</option>
+                            <option value="sl">{{ __('Slovenian') }}</option>
+                            <option value="sv">{{ __('Swedish') }}</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-center justify-end space-x-3 pt-4">
+                        <button type="button" onclick="closePrintModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            {{ __('Cancel') }}
+                        </button>
+                        <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            📄 {{ __('Generate PDF') }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Declaration Modal -->
+    <div id="emailModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">{{ __('Email Declaration') }}</h3>
+                    <button onclick="closeEmailModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <form id="emailForm" class="space-y-4">
+                    @csrf
+                    <div>
+                        <label for="email_address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            {{ __('Email Address') }} <span class="text-red-500">*</span>
+                        </label>
+                        <input type="email" name="emailAddress" id="email_address" required placeholder="{{ __('driver@example.com') }}" class="block w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-700 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    </div>
+
+                    <div>
+                        <label for="email_language" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            {{ __('Language') }} <span class="text-red-500">*</span>
+                        </label>
+                        <select name="declarationLanguage" id="email_language" required class="block w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-700 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            <option value="">{{ __('Select Language') }}</option>
+                            <option value="bg">{{ __('Bulgarian') }}</option>
+                            <option value="cs">{{ __('Czech') }}</option>
+                            <option value="da">{{ __('Danish') }}</option>
+                            <option value="de">{{ __('German') }}</option>
+                            <option value="et">{{ __('Estonian') }}</option>
+                            <option value="el">{{ __('Greek') }}</option>
+                            <option value="en">{{ __('English') }}</option>
+                            <option value="es">{{ __('Spanish') }}</option>
+                            <option value="fr">{{ __('French') }}</option>
+                            <option value="fi">{{ __('Finnish') }}</option>
+                            <option value="ga">{{ __('Irish') }}</option>
+                            <option value="hr">{{ __('Croatian') }}</option>
+                            <option value="hu">{{ __('Hungarian') }}</option>
+                            <option value="it">{{ __('Italian') }}</option>
+                            <option value="lv">{{ __('Latvian') }}</option>
+                            <option value="lt">{{ __('Lithuanian') }}</option>
+                            <option value="mt">{{ __('Maltese') }}</option>
+                            <option value="nl">{{ __('Dutch') }}</option>
+                            <option value="no">{{ __('Norwegian') }}</option>
+                            <option value="pl">{{ __('Polish') }}</option>
+                            <option value="pt">{{ __('Portuguese') }}</option>
+                            <option value="ro">{{ __('Romanian') }}</option>
+                            <option value="sk">{{ __('Slovak') }}</option>
+                            <option value="sl">{{ __('Slovenian') }}</option>
+                            <option value="sv">{{ __('Swedish') }}</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-center justify-end space-x-3 pt-4">
+                        <button type="button" onclick="closeEmailModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            {{ __('Cancel') }}
+                        </button>
+                        <button type="submit" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            ✉️ {{ __('Send Email') }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const declarationId = '{{ $declaration["declarationId"] }}';
+
+        // Print Modal Functions
+        function openPrintModal() {
+            document.getElementById('printModal').classList.remove('hidden');
+        }
+
+        function closePrintModal() {
+            document.getElementById('printModal').classList.add('hidden');
+            document.getElementById('printForm').reset();
+        }
+
+        // Email Modal Functions
+        function openEmailModal() {
+            document.getElementById('emailModal').classList.remove('hidden');
+        }
+
+        function closeEmailModal() {
+            document.getElementById('emailModal').classList.add('hidden');
+            document.getElementById('emailForm').reset();
+        }
+
+        // Print Form Submission
+        document.getElementById('printForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+            const data = {
+                declarationLanguage: formData.get('declarationLanguage'),
+                _token: document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            };
+
+            // Show loading state
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '⏳ {{ __("Generating...") }}';
+            submitBtn.disabled = true;
+
+            fetch(`{{ route('declarations.print', $declaration['declarationId']) }}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': data._token
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.url) {
+                    // Open the PDF in a new tab
+                    window.open(data.url, '_blank');
+                    closePrintModal();
+                    showNotification('{{ __("PDF generated successfully!") }}', 'success');
+                } else {
+                    throw new Error(data.message || '{{ __("Failed to generate PDF") }}');
+                }
+            })
+            .catch(error => {
+                console.error('Print error:', error);
+                showNotification(error.message || '{{ __("Failed to generate PDF") }}', 'error');
+            })
+            .finally(() => {
+                // Restore button state
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
+        });
+
+        // Email Form Submission
+        document.getElementById('emailForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+            const data = {
+                emailAddress: formData.get('emailAddress'),
+                declarationLanguage: formData.get('declarationLanguage'),
+                _token: document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            };
+
+            // Show loading state
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '⏳ {{ __("Sending...") }}';
+            submitBtn.disabled = true;
+
+            fetch(`{{ route('declarations.email', $declaration['declarationId']) }}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': data._token
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeEmailModal();
+                    showNotification('{{ __("Declaration sent successfully!") }}', 'success');
+                } else {
+                    throw new Error(data.message || '{{ __("Failed to send email") }}');
+                }
+            })
+            .catch(error => {
+                console.error('Email error:', error);
+                showNotification(error.message || '{{ __("Failed to send email") }}', 'error');
+            })
+            .finally(() => {
+                // Restore button state
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
+        });
+
+        // Notification function
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+            notification.className = `fixed top-4 right-4 ${bgColor} text-white px-4 py-2 rounded-lg shadow-lg z-50`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 5000);
+        }
+
+        // Close modals when clicking outside
+        document.getElementById('printModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closePrintModal();
+            }
+        });
+
+        document.getElementById('emailModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeEmailModal();
+            }
+        });
+
+        // Close modals with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closePrintModal();
+                closeEmailModal();
+            }
+        });
+    </script>
 </x-layouts.app>

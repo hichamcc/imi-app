@@ -3,15 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Services\DriverService;
+use App\Services\DeclarationService;
 use Illuminate\Http\Request;
 
 class DriverController extends Controller
 {
     protected DriverService $driverService;
+    protected DeclarationService $declarationService;
 
-    public function __construct(DriverService $driverService)
+    public function __construct(DriverService $driverService, DeclarationService $declarationService)
     {
         $this->driverService = $driverService;
+        $this->declarationService = $declarationService;
     }
 
     /**
@@ -100,7 +103,11 @@ class DriverController extends Controller
     {
         try {
             $driver = $this->driverService->getDriver($id);
-            return view('drivers.show', compact('driver'));
+
+            // Get driver's declarations by matching driver name
+            $declarations = $this->getDriverDeclarations($driver);
+
+            return view('drivers.show', compact('driver', 'declarations'));
         } catch (\Exception $e) {
             return redirect()->route('drivers.index')->with('error', 'Failed to load driver: ' . $e->getMessage());
         }
@@ -161,6 +168,56 @@ class DriverController extends Controller
             return redirect()->route('drivers.index')->with('success', 'Driver deleted successfully!');
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to delete driver: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Get declarations for a specific driver by matching driver name
+     */
+    private function getDriverDeclarations(array $driver): array
+    {
+        try {
+            // Get all declarations
+            $declarations = $this->declarationService->getDeclarationsPaginated(250);
+            $declarationsData = $declarations['items'] ?? $declarations ?? [];
+
+            $driverFullName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
+            $driverDateOfBirth = $driver['driverDateOfBirth'] ?? null;
+
+            $matchingDeclarations = [];
+
+            foreach ($declarationsData as $declaration) {
+                $declarationDriverName = $declaration['driverLatinFullName'] ?? null;
+                $declarationDateOfBirth = $declaration['driverDateOfBirth'] ?? null;
+
+                // Match by driver name and optionally by date of birth for better accuracy
+                if ($declarationDriverName === $driverFullName) {
+                    // If date of birth is available in both, use it for additional verification
+                    if ($driverDateOfBirth && $declarationDateOfBirth) {
+                        if ($driverDateOfBirth === $declarationDateOfBirth) {
+                            $matchingDeclarations[] = $declaration;
+                        }
+                    } else {
+                        // If no date of birth available, match by name only
+                        $matchingDeclarations[] = $declaration;
+                    }
+                }
+            }
+
+            // Sort declarations by creation date (newest first)
+            usort($matchingDeclarations, function($a, $b) {
+                $dateA = $a['declarationStartDate'] ?? '0000-00-00';
+                $dateB = $b['declarationStartDate'] ?? '0000-00-00';
+                return strcmp($dateB, $dateA);
+            });
+
+            return $matchingDeclarations;
+        } catch (\Exception $e) {
+            \Log::error('Failed to fetch driver declarations', [
+                'driver_id' => $driver['driverId'] ?? 'unknown',
+                'error' => $e->getMessage()
+            ]);
+            return [];
         }
     }
 }

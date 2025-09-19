@@ -6,9 +6,14 @@
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ __('Declarations') }}</h1>
                 <p class="text-gray-600 dark:text-gray-400">{{ __('Manage your transport posting declarations') }}</p>
             </div>
-            <a href="{{ route('declarations.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                {{ __('Create Declaration') }}
-            </a>
+            <div class="flex space-x-3">
+                <button id="submitSelectedBtn" onclick="submitSelected()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors hidden">
+                    {{ __('Submit Selected') }} (<span id="selectedCount">0</span>)
+                </button>
+                <a href="{{ route('declarations.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    {{ __('Create Declaration') }}
+                </a>
+            </div>
         </div>
 
         <!-- Search and Filters -->
@@ -59,6 +64,12 @@
                         <thead class="bg-gray-50 dark:bg-gray-900">
                             <tr>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <div class="flex items-center">
+                                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                                        <label for="selectAll" class="ml-2 sr-only">{{ __('Select All') }}</label>
+                                    </div>
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     {{ __('Declaration') }}
                                 </th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -81,6 +92,14 @@
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                             @foreach($declarations['items'] as $declaration)
                                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        @if(($declaration['declarationStatus'] ?? '') === 'DRAFT')
+                                            <input type="checkbox"
+                                                   class="declaration-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                                   value="{{ $declaration['declarationId'] }}"
+                                                   onchange="updateSelectedCount()">
+                                        @endif
+                                    </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm font-medium text-gray-900 dark:text-white">
                                             {{ substr($declaration['declarationId'] ?? '', 0, 8) }}...
@@ -238,4 +257,117 @@
             @endif
         </div>
     </div>
+
+    <script>
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.declaration-checkbox:checked');
+            const count = checkboxes.length;
+            const selectedCountElement = document.getElementById('selectedCount');
+            const submitBtn = document.getElementById('submitSelectedBtn');
+
+            selectedCountElement.textContent = count;
+
+            if (count > 0) {
+                submitBtn.classList.remove('hidden');
+            } else {
+                submitBtn.classList.add('hidden');
+            }
+        }
+
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.declaration-checkbox');
+
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+
+            updateSelectedCount();
+        }
+
+        async function submitSelected() {
+            const checkboxes = document.querySelectorAll('.declaration-checkbox:checked');
+            const declarationIds = Array.from(checkboxes).map(cb => cb.value);
+
+            if (declarationIds.length === 0) {
+                alert('{{ __("Please select at least one declaration to submit.") }}');
+                return;
+            }
+
+            if (!confirm(`{{ __("Are you sure you want to submit") }} ${declarationIds.length} {{ __("selected declarations?") }}`)) {
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitSelectedBtn');
+            const originalText = submitBtn.innerHTML;
+
+            let successCount = 0;
+            let failedDeclarations = [];
+
+            // Process each declaration one by one
+            for (let i = 0; i < declarationIds.length; i++) {
+                const declarationId = declarationIds[i];
+                submitBtn.innerHTML = `{{ __("Submitting") }} ${i + 1}/${declarationIds.length}...`;
+
+                try {
+                    const response = await fetch(`/declarations/${declarationId}/submit`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        }
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                        // Remove checkbox for successfully submitted declaration
+                        const checkbox = document.querySelector(`input[value="${declarationId}"]`);
+                        if (checkbox) {
+                            const row = checkbox.closest('tr');
+                            // Update status badge
+                            const statusBadge = row.querySelector('.inline-flex.px-2.py-1');
+                            if (statusBadge) {
+                                statusBadge.className = 'inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
+                                statusBadge.textContent = 'Submitted';
+                            }
+                            // Remove checkbox and actions
+                            checkbox.remove();
+                            const actionsCell = row.querySelector('td:last-child');
+                            if (actionsCell) {
+                                actionsCell.innerHTML = '<div class="flex justify-end space-x-2"><a href="/declarations/' + declarationId + '" class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">{{ __("View") }}</a></div>';
+                            }
+                        }
+                    } else {
+                        const errorData = await response.json();
+                        failedDeclarations.push({
+                            id: declarationId.substring(0, 8) + '...',
+                            error: errorData.message || '{{ __("Unknown error") }}'
+                        });
+                    }
+                } catch (error) {
+                    failedDeclarations.push({
+                        id: declarationId.substring(0, 8) + '...',
+                        error: error.message || '{{ __("Network error") }}'
+                    });
+                }
+            }
+
+            // Reset button and show results
+            submitBtn.innerHTML = originalText;
+            updateSelectedCount();
+
+            // Show results
+            let message = `{{ __("Successfully submitted") }} ${successCount} {{ __("declarations") }}.`;
+            if (failedDeclarations.length > 0) {
+                message += `\n\n{{ __("Failed submissions") }}:\n` + failedDeclarations.map(f => `${f.id}: ${f.error}`).join('\n');
+            }
+
+            alert(message);
+
+            // Refresh page to show updated statuses
+            if (successCount > 0) {
+                window.location.reload();
+            }
+        }
+    </script>
 </x-layouts.app>

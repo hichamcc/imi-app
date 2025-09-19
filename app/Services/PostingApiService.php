@@ -58,6 +58,11 @@ class PostingApiService
 
             $data = json_decode($response->getBody()->getContents(), true);
 
+            // Handle null response (empty body or invalid JSON)
+            if ($data === null) {
+                $data = ['success' => true, 'status' => $response->getStatusCode()];
+            }
+
             if ($this->cacheEnabled) {
                 Cache::put($cacheKey, $data, $this->cacheTtl);
             }
@@ -85,7 +90,19 @@ class PostingApiService
                 'json' => $data
             ]);
 
-            $responseData = json_decode($response->getBody()->getContents(), true);
+            $responseBody = $response->getBody()->getContents();
+            $responseData = json_decode($responseBody, true);
+
+            // Handle null response (empty body or invalid JSON)
+            // For certain endpoints like /print, the response might be a plain text URL
+            if ($responseData === null) {
+                if (!empty($responseBody) && filter_var($responseBody, FILTER_VALIDATE_URL)) {
+                    // If response is a valid URL (like S3 URL), return it as data
+                    $responseData = ['url' => trim($responseBody), 'status' => $response->getStatusCode()];
+                } else {
+                    $responseData = ['success' => true, 'status' => $response->getStatusCode()];
+                }
+            }
 
             // Clear related cache entries
             $this->clearRelatedCache($endpoint);
@@ -114,6 +131,11 @@ class PostingApiService
             ]);
 
             $responseData = json_decode($response->getBody()->getContents(), true);
+
+            // Handle null response (empty body or invalid JSON)
+            if ($responseData === null) {
+                $responseData = ['success' => true, 'status' => $response->getStatusCode()];
+            }
 
             // Clear related cache entries
             $this->clearRelatedCache($endpoint);

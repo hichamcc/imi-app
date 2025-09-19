@@ -23,6 +23,8 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('declarations', DeclarationController::class);
     Route::post('declarations/{declaration}/submit', [DeclarationController::class, 'submit'])->name('declarations.submit');
     Route::post('declarations/{declaration}/withdraw', [DeclarationController::class, 'withdraw'])->name('declarations.withdraw');
+    Route::post('declarations/{declaration}/print', [DeclarationController::class, 'print'])->name('declarations.print');
+    Route::post('declarations/{declaration}/email', [DeclarationController::class, 'email'])->name('declarations.email');
     Route::get('declarations/driver/{driver}/truck-plates', [DeclarationController::class, 'getDriverTruckPlates'])->name('declarations.driver-truck-plates');
 
     // Truck Management Routes
