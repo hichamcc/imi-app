@@ -28,7 +28,7 @@ class EnsureApiCredentials
 
         // Check if user has valid API credentials (skip for admins accessing user management)
         if (!$request->user()->hasValidApiCredentials() && !$this->isAdminRoute($request)) {
-            return redirect()->route('profile.edit')->with('error', 'Please configure your API credentials to access the system.');
+            return redirect()->route('contact-admin')->with('error', 'Please configure your API credentials to access the system.');
         }
 
         return $next($request);

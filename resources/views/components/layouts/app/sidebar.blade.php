@@ -14,30 +14,30 @@
             </a>
 
             <x-navlist>
-                <x-navlist.group :heading="__('Platform')">
-                    <x-navlist.item before="phosphor-house-line" :href="route('dashboard')" :current="request()->routeIs('dashboard')">
-                        {{ __('Dashboard') }}
-                    </x-navlist.item>
-                </x-navlist.group>
-
-                <x-navlist.group :heading="__('Management')">
-                    <x-navlist.item before="phosphor-users" :href="route('drivers.index')" :current="request()->routeIs('drivers.*')">
-                        {{ __('Drivers') }}
-                    </x-navlist.item>
-                    <x-navlist.item before="phosphor-truck" :href="route('trucks.index')" :current="request()->routeIs('trucks.*')">
-                        {{ __('Trucks') }}
-                    </x-navlist.item>
-                    <x-navlist.item before="phosphor-file-text" :href="route('declarations.index')" :current="request()->routeIs('declarations.*')">
-                        {{ __('Declarations') }}
-                    </x-navlist.item>
-                </x-navlist.group>
-
                 @if(auth()->user()->isAdmin())
-                <x-navlist.group :heading="__('Administration')">
-                    <x-navlist.item before="phosphor-user-gear" :href="route('admin.users.index')" :current="request()->routeIs('admin.users.*')">
-                        {{ __('User Management') }}
-                    </x-navlist.item>
-                </x-navlist.group>
+                    <x-navlist.group :heading="__('Administration')">
+                        <x-navlist.item before="phosphor-user-gear" :href="route('admin.users.index')" :current="request()->routeIs('admin.users.*')">
+                            {{ __('User Management') }}
+                        </x-navlist.item>
+                    </x-navlist.group>
+                @else
+                    <x-navlist.group :heading="__('Platform')">
+                        <x-navlist.item before="phosphor-house-line" :href="route('dashboard')" :current="request()->routeIs('dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-navlist.item>
+                    </x-navlist.group>
+
+                    <x-navlist.group :heading="__('Management')">
+                        <x-navlist.item before="phosphor-users" :href="route('drivers.index')" :current="request()->routeIs('drivers.*')">
+                            {{ __('Drivers') }}
+                        </x-navlist.item>
+                        <x-navlist.item before="phosphor-truck" :href="route('trucks.index')" :current="request()->routeIs('trucks.*')">
+                            {{ __('Trucks') }}
+                        </x-navlist.item>
+                        <x-navlist.item before="phosphor-file-text" :href="route('declarations.index')" :current="request()->routeIs('declarations.*')">
+                            {{ __('Declarations') }}
+                        </x-navlist.item>
+                    </x-navlist.group>
                 @endif
 
             </x-navlist>

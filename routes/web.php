@@ -15,6 +15,10 @@ Route::get('dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
+Route::get('contact-admin', function () {
+    return view('contact-admin');
+})->middleware(['auth'])->name('contact-admin');
+
 Route::middleware(['auth', 'api.credentials'])->group(function () {
     // Driver Management Routes
     Route::resource('drivers', DriverController::class);

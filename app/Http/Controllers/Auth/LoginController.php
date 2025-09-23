@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Services\PostingApiService;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -45,6 +47,22 @@ class LoginController extends Controller
 
     public function destroy(Request $request): RedirectResponse
     {
+        // Clear API cache before logout to prevent data leakage between users
+        try {
+            $apiService = app(PostingApiService::class);
+            $apiService->clearApiCache();
+
+            // Also clear Laravel cache
+            Cache::flush();
+
+            \Log::info('Cache cleared on logout', ['user_id' => auth()->id()]);
+        } catch (\Exception $e) {
+            \Log::warning('Failed to clear cache on logout', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage()
+            ]);
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
