@@ -15,7 +15,7 @@ Route::get('dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'api.credentials'])->group(function () {
     // Driver Management Routes
     Route::resource('drivers', DriverController::class);
 
@@ -31,6 +31,15 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('trucks', TruckController::class);
     Route::post('trucks/{truck}/assign-driver', [TruckController::class, 'assignDriver'])->name('trucks.assign-driver');
     Route::delete('truck-assignments/{assignment}', [TruckController::class, 'unassignDriver'])->name('trucks.unassign-driver');
+});
+
+Route::middleware(['auth'])->group(function () {
+    // Admin Routes - Only accessible by admins
+    Route::prefix('admin')->name('admin.')->group(function () {
+        Route::resource('users', \App\Http\Controllers\Admin\UserController::class);
+        Route::post('users/{user}/toggle-status', [\App\Http\Controllers\Admin\UserController::class, 'toggleStatus'])
+            ->name('users.toggle-status');
+    });
 
     // Settings Routes
     Route::redirect('settings', 'settings/profile');

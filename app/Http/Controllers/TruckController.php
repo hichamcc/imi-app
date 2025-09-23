@@ -6,6 +6,7 @@ use App\Models\Truck;
 use App\Services\TruckService;
 use App\Services\DriverService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class TruckController extends Controller
 {
@@ -59,7 +60,14 @@ class TruckController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:100',
-            'plate' => 'required|string|max:20|unique:trucks,plate',
+            'plate' => [
+                'required',
+                'string',
+                'max:20',
+                Rule::unique('trucks')->where(function ($query) {
+                    return $query->where('user_id', auth()->id());
+                })
+            ],
             'capacity_tons' => 'required|numeric|min:0.01|max:999999.99',
             'status' => 'required|in:Available,In-Transit,Maintenance,Retired',
             'countries' => 'nullable|array',
@@ -119,7 +127,14 @@ class TruckController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:100',
-            'plate' => 'required|string|max:20|unique:trucks,plate,' . $id,
+            'plate' => [
+                'required',
+                'string',
+                'max:20',
+                Rule::unique('trucks')->where(function ($query) {
+                    return $query->where('user_id', auth()->id());
+                })->ignore($id)
+            ],
             'capacity_tons' => 'required|numeric|min:0.01|max:999999.99',
             'status' => 'required|in:Available,In-Transit,Maintenance,Retired',
             'countries' => 'nullable|array',

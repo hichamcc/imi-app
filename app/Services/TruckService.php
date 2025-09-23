@@ -21,7 +21,8 @@ class TruckService
      */
     public function getTrucksPaginated(int $perPage = 15, array $filters = []): LengthAwarePaginator
     {
-        $query = Truck::with('activeAssignments');
+        $query = Truck::with('activeAssignments')
+            ->where('user_id', auth()->id());
 
         // Apply status filter
         if (!empty($filters['status'])) {
@@ -61,7 +62,9 @@ class TruckService
     {
         $truck = Truck::with(['activeAssignments', 'assignments' => function ($query) {
             $query->orderBy('assigned_date', 'desc');
-        }])->findOrFail($id);
+        }])
+        ->where('user_id', auth()->id())
+        ->findOrFail($id);
 
         // Fetch driver details for active assignments
         foreach ($truck->activeAssignments as $assignment) {
@@ -97,6 +100,7 @@ class TruckService
      */
     public function createTruck(array $data): Truck
     {
+        $data['user_id'] = auth()->id();
         return Truck::create($data);
     }
 
@@ -105,7 +109,7 @@ class TruckService
      */
     public function updateTruck(int $id, array $data): Truck
     {
-        $truck = Truck::findOrFail($id);
+        $truck = Truck::where('user_id', auth()->id())->findOrFail($id);
         $truck->update($data);
         return $truck;
     }
@@ -115,7 +119,7 @@ class TruckService
      */
     public function deleteTruck(int $id): bool
     {
-        $truck = Truck::findOrFail($id);
+        $truck = Truck::where('user_id', auth()->id())->findOrFail($id);
 
         // Check if truck has active assignments
         if ($truck->activeAssignments()->exists()) {
@@ -130,7 +134,7 @@ class TruckService
      */
     public function assignDriver(int $truckId, string $driverId, ?string $notes = null): TruckAssignment
     {
-        $truck = Truck::findOrFail($truckId);
+        $truck = Truck::where('user_id', auth()->id())->findOrFail($truckId);
 
         // Check if truck can be assigned
         if (!$truck->canBeAssigned()) {
@@ -183,9 +187,10 @@ class TruckService
      */
     public function getTrucksForDriver(string $driverId): Collection
     {
-        return Truck::whereHas('activeAssignments', function ($query) use ($driverId) {
-            $query->where('driver_id', $driverId);
-        })->get();
+        return Truck::where('user_id', auth()->id())
+            ->whereHas('activeAssignments', function ($query) use ($driverId) {
+                $query->where('driver_id', $driverId);
+            })->get();
     }
 
     /**
@@ -193,19 +198,25 @@ class TruckService
      */
     public function getFleetStatistics(): array
     {
+        $userTrucks = Truck::where('user_id', auth()->id());
+
         $stats = [
-            'total' => Truck::count(),
-            'available' => Truck::where('status', 'Available')->count(),
-            'in_transit' => Truck::where('status', 'In-Transit')->count(),
-            'maintenance' => Truck::where('status', 'Maintenance')->count(),
-            'retired' => Truck::where('status', 'Retired')->count(),
-            'total_capacity' => Truck::sum('capacity_tons'),
-            'active_assignments' => TruckAssignment::where('is_active', true)->count(),
+            'total' => $userTrucks->count(),
+            'available' => $userTrucks->where('status', 'Available')->count(),
+            'in_transit' => $userTrucks->where('status', 'In-Transit')->count(),
+            'maintenance' => $userTrucks->where('status', 'Maintenance')->count(),
+            'retired' => $userTrucks->where('status', 'Retired')->count(),
+            'total_capacity' => $userTrucks->sum('capacity_tons'),
+            'active_assignments' => TruckAssignment::whereIn('truck_id',
+                Truck::where('user_id', auth()->id())->pluck('id')
+            )->where('is_active', true)->count(),
         ];
 
         // Calculate utilization (trucks with active assignments / total available trucks)
-        $availableForAssignment = Truck::whereIn('status', ['Available', 'In-Transit'])->count();
-        $assignedTrucks = Truck::whereHas('activeAssignments')->count();
+        $availableForAssignment = Truck::where('user_id', auth()->id())
+            ->whereIn('status', ['Available', 'In-Transit'])->count();
+        $assignedTrucks = Truck::where('user_id', auth()->id())
+            ->whereHas('activeAssignments')->count();
 
         $stats['utilization_percentage'] = $availableForAssignment > 0
             ? round(($assignedTrucks / $availableForAssignment) * 100, 1)
@@ -220,6 +231,7 @@ class TruckService
     public function getAssignmentReport(): Collection
     {
         return TruckAssignment::with(['truck'])
+            ->whereIn('truck_id', Truck::where('user_id', auth()->id())->pluck('id'))
             ->where('is_active', true)
             ->orderBy('assigned_date', 'desc')
             ->get();
@@ -230,7 +242,8 @@ class TruckService
      */
     public function getAvailableTrucks(): Collection
     {
-        return Truck::whereIn('status', ['Available', 'In-Transit'])
+        return Truck::where('user_id', auth()->id())
+            ->whereIn('status', ['Available', 'In-Transit'])
             ->orderBy('name')
             ->get();
     }

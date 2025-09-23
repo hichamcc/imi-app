@@ -33,6 +33,9 @@ class ProfileController extends Controller
                 'max:255',
                 Rule::unique(User::class)->ignore($user->id),
             ],
+            'api_key' => ['nullable', 'string', 'max:255'],
+            'api_operator_id' => ['nullable', 'string', 'max:255'],
+            'api_base_url' => ['nullable', 'url', 'max:255'],
         ]);
 
         $user->fill($validated);

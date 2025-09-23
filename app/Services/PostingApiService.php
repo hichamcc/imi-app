@@ -20,6 +20,7 @@ class PostingApiService
 
     public function __construct()
     {
+        // Initialize with default config values (will be overridden by setUserCredentials)
         $this->baseUrl = config('posting.api.base_url');
         $this->apiKey = config('posting.api.key');
         $this->operatorId = config('posting.api.operator_id');
@@ -27,6 +28,35 @@ class PostingApiService
         $this->cacheEnabled = config('posting.cache.enabled');
         $this->cacheTtl = config('posting.cache.ttl');
         $this->cachePrefix = config('posting.cache.prefix');
+
+        $this->initializeClient();
+    }
+
+    /**
+     * Set user-specific API credentials
+     */
+    public function setUserCredentials(string $baseUrl, string $apiKey, string $operatorId): void
+    {
+        \Log::info('PostingApiService - Setting user credentials', [
+            'base_url' => $baseUrl,
+            'api_key' => substr($apiKey, 0, 8) . '...',
+            'operator_id' => $operatorId
+        ]);
+
+        $this->baseUrl = $baseUrl;
+        $this->apiKey = $apiKey;
+        $this->operatorId = $operatorId;
+
+        $this->initializeClient();
+    }
+
+    /**
+     * Initialize the HTTP client with current credentials
+     */
+    private function initializeClient(): void
+    {
+        // Refresh user credentials if user is authenticated
+        $this->refreshUserCredentials();
 
         $this->client = new Client([
             'base_uri' => $this->baseUrl,
@@ -38,6 +68,25 @@ class PostingApiService
                 'Content-Type' => 'application/json',
             ],
         ]);
+    }
+
+    /**
+     * Refresh user credentials from database
+     */
+    private function refreshUserCredentials(): void
+    {
+        if (auth()->check() && auth()->user()->hasValidApiCredentials()) {
+            $user = auth()->user();
+            \Log::info('PostingApiService - Refreshing credentials from database', [
+                'user_id' => $user->id,
+                'api_key' => substr($user->api_key, 0, 8) . '...',
+                'operator_id' => $user->api_operator_id
+            ]);
+
+            $this->baseUrl = $user->api_base_url;
+            $this->apiKey = $user->api_key;
+            $this->operatorId = $user->api_operator_id;
+        }
     }
 
     /**
@@ -73,6 +122,10 @@ class PostingApiService
             Log::error('API GET request failed', [
                 'endpoint' => $endpoint,
                 'params' => $params,
+                'base_url' => $this->baseUrl,
+                'api_key' => substr($this->apiKey, 0, 8) . '...',
+                'operator_id' => $this->operatorId,
+                'user_id' => auth()->id(),
                 'error' => $e->getMessage()
             ]);
 
@@ -269,5 +322,43 @@ class PostingApiService
             Log::warning('API connection test failed', ['error' => $e->getMessage()]);
             return false;
         }
+    }
+
+    /**
+     * Clear all API cache entries
+     */
+    public function clearApiCache(): void
+    {
+        if (!$this->cacheEnabled) {
+            return;
+        }
+
+        // Get all cache keys with our prefix
+        $cacheStore = Cache::getStore();
+
+        // For file cache driver, we can use cache tags (if supported) or flush all
+        // Since we're using a prefix, we'll flush all cache for simplicity
+        // In production, you might want to implement a more targeted approach
+        Cache::flush();
+
+        Log::info('API cache cleared');
+    }
+
+    /**
+     * Clear cache for a specific endpoint
+     */
+    public function clearEndpointCache(string $endpoint, string $method = 'GET'): void
+    {
+        if (!$this->cacheEnabled) {
+            return;
+        }
+
+        $pattern = $this->cachePrefix . $method . '_' . str_replace('/', '_', trim($endpoint, '/'));
+
+        // For more precise clearing, you would need to track cache keys
+        // For now, we'll clear all related cache entries
+        $this->clearRelatedCache($endpoint);
+
+        Log::info('Cache cleared for endpoint', ['endpoint' => $endpoint, 'method' => $method]);
     }
 }

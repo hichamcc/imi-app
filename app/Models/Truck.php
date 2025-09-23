@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Truck extends Model
 {
     protected $fillable = [
+        'user_id',
         'name',
         'plate',
         'capacity_tons',
@@ -19,6 +21,11 @@ class Truck extends Model
         'capacity_tons' => 'decimal:2',
         'countries' => 'array',
     ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function assignments(): HasMany
     {

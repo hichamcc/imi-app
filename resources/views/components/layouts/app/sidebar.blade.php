@@ -32,6 +32,14 @@
                     </x-navlist.item>
                 </x-navlist.group>
 
+                @if(auth()->user()->isAdmin())
+                <x-navlist.group :heading="__('Administration')">
+                    <x-navlist.item before="phosphor-user-gear" :href="route('admin.users.index')" :current="request()->routeIs('admin.users.*')">
+                        {{ __('User Management') }}
+                    </x-navlist.item>
+                </x-navlist.group>
+                @endif
+
             </x-navlist>
 
             <x-spacer />
