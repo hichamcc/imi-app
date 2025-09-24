@@ -52,8 +52,8 @@ class AutoSubmitExpiredDeclarations extends Command
                         $user->api_operator_id
                     );
 
-                    // Get all declarations for this user
-                    $declarations = $this->apiService->get('/declarations', ['limit' => 1000]);
+                    // Get all declarations for this user (API max limit is 250)
+                    $declarations = $this->apiService->get('/declarations', ['limit' => 250]);
 
                     if (isset($declarations['data']) && is_array($declarations['data'])) {
                         foreach ($declarations['data'] as $declaration) {
