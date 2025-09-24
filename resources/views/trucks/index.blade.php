@@ -6,9 +6,15 @@
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ __('Trucks') }}</h1>
                 <p class="text-gray-600 dark:text-gray-400">{{ __('Manage your fleet vehicles') }}</p>
             </div>
-            <a href="{{ route('trucks.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                {{ __('Add Truck') }}
-            </a>
+            <div class="flex space-x-3">
+                <a href="{{ route('trucks.import') }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    <x-phosphor-upload class="w-4 h-4 inline mr-2" />
+                    {{ __('Import Trucks') }}
+                </a>
+                <a href="{{ route('trucks.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    {{ __('Add Truck') }}
+                </a>
+            </div>
         </div>
 
         <!-- Search and Filters -->

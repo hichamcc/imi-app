@@ -46,6 +46,16 @@ class DriverController extends Controller
         try {
             $drivers = $this->driverService->getDriversPaginated($limit, $startKey, $filters);
 
+            // Log the driver list API result
+            \Log::info('Driver List API Result', [
+                'user_id' => auth()->id(),
+                'filters' => $filters,
+                'limit' => $limit,
+                'startKey' => $startKey,
+                'api_response' => $drivers,
+                'driver_count' => isset($drivers['items']) ? count($drivers['items']) : (is_array($drivers) ? count($drivers) : 0)
+            ]);
+
             // Add active declaration countries to drivers
             if (isset($drivers['items'])) {
                 $drivers['items'] = $this->driverService->getDriversWithActiveCountries($drivers['items']);

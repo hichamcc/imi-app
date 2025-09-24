@@ -201,4 +201,96 @@ class TruckController extends Controller
                 ->with('error', 'Failed to unassign driver: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Show the import form
+     */
+    public function import()
+    {
+        return view('trucks.import');
+    }
+
+    /**
+     * Import trucks from text file
+     */
+    public function processImport(Request $request)
+    {
+        $request->validate([
+            'truck_file' => 'required|file|mimes:txt,csv|max:2048'
+        ]);
+
+        try {
+            $file = $request->file('truck_file');
+            $content = file_get_contents($file->getPathname());
+            $lines = array_filter(array_map('trim', explode("\n", $content)));
+
+            $imported = 0;
+            $errors = [];
+            $allCountries = array_keys(\App\Services\DeclarationService::getPostingCountries());
+
+            foreach ($lines as $lineNumber => $line) {
+                if (empty($line)) continue;
+
+                // Split by semicolon or tab, expecting: plate_number;truck_name or plate_number	truck_name
+                $parts = preg_split('/[;\t]/', $line, -1, PREG_SPLIT_NO_EMPTY);
+
+                if (count($parts) < 2) {
+                    $errors[] = "Line " . ($lineNumber + 1) . ": Invalid format. Expected 'plate_number;truck_name' or 'plate_number	truck_name'";
+                    continue;
+                }
+
+                $plateNumber = trim($parts[0]);
+                $truckName = trim($parts[1]);
+
+                // Validate data
+                if (empty($plateNumber) || empty($truckName)) {
+                    $errors[] = "Line " . ($lineNumber + 1) . ": Plate number and truck name cannot be empty";
+                    continue;
+                }
+
+                // Check if truck already exists for this user
+                $existingTruck = Truck::where('user_id', auth()->id())
+                    ->where('plate', $plateNumber)
+                    ->first();
+
+                if ($existingTruck) {
+                    $errors[] = "Line " . ($lineNumber + 1) . ": Truck with plate '{$plateNumber}' already exists";
+                    continue;
+                }
+
+                try {
+                    // Create truck with default values
+                    Truck::create([
+                        'user_id' => auth()->id(),
+                        'name' => $truckName,
+                        'plate' => $plateNumber,
+                        'capacity_tons' => 40.0, // Default capacity
+                        'status' => 'Available', // Default status
+                        'countries' => $allCountries, // Associate with all countries by default
+                    ]);
+
+                    $imported++;
+                } catch (\Exception $e) {
+                    $errors[] = "Line " . ($lineNumber + 1) . ": Failed to create truck - " . $e->getMessage();
+                }
+            }
+
+            $message = "Import completed! {$imported} trucks imported successfully.";
+            if (!empty($errors)) {
+                $message .= " " . count($errors) . " errors occurred.";
+                \Log::warning('Truck import errors', ['errors' => $errors]);
+                return redirect()->route('trucks.index')
+                    ->with('warning', $message)
+                    ->with('import_errors', $errors);
+            }
+
+            return redirect()->route('trucks.index')
+                ->with('success', $message);
+
+        } catch (\Exception $e) {
+            \Log::error('Truck import failed', ['error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', 'Failed to process import: ' . $e->getMessage());
+        }
+    }
 }

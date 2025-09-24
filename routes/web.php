@@ -33,6 +33,8 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
 
     // Truck Management Routes
     Route::resource('trucks', TruckController::class);
+    Route::get('trucks-import', [TruckController::class, 'import'])->name('trucks.import');
+    Route::post('trucks-import', [TruckController::class, 'processImport'])->name('trucks.process-import');
     Route::post('trucks/{truck}/assign-driver', [TruckController::class, 'assignDriver'])->name('trucks.assign-driver');
     Route::delete('truck-assignments/{assignment}', [TruckController::class, 'unassignDriver'])->name('trucks.unassign-driver');
 });
