@@ -49,25 +49,36 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $this->checkAdminAccess();
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
-            'api_key' => 'nullable|string|max:255',
-            'api_operator_id' => 'nullable|string|max:255',
-            'api_base_url' => 'nullable|url|max:255',
-            'is_admin' => 'nullable|boolean',
-            'is_active' => 'nullable|boolean',
-        ]);
 
-        $validated['password'] = Hash::make($validated['password']);
-        $validated['is_admin'] = $request->has('is_admin');
-        $validated['is_active'] = $request->has('is_active');
+        \Log::info('User creation attempt', ['request_data' => $request->all()]);
 
-        User::create($validated);
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|string|email|max:255|unique:users',
+                'password' => 'required|string|min:8',
+                'api_key' => 'nullable|string|max:255',
+                'api_operator_id' => 'nullable|string|max:255',
+                'api_base_url' => 'nullable|url|max:255',
+            ]);
 
-        return redirect()->route('admin.users.index')
-            ->with('success', 'User created successfully.');
+            $validated['password'] = Hash::make($validated['password']);
+            $validated['is_admin'] = $request->has('is_admin');
+            $validated['is_active'] = $request->has('is_active');
+            $validated['email_verified_at'] = now();
+
+            \Log::info('About to create user', ['validated_data' => array_merge($validated, ['password' => '[HIDDEN]'])]);
+
+            $user = User::create($validated);
+
+            \Log::info('User created successfully', ['user_id' => $user->id]);
+
+            return redirect()->route('admin.users.index')
+                ->with('success', 'User created successfully.');
+        } catch (\Exception $e) {
+            \Log::error('User creation failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return redirect()->back()->withInput()->withErrors(['error' => 'Failed to create user: ' . $e->getMessage()]);
+        }
     }
 
     /**

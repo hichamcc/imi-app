@@ -80,7 +80,7 @@
                         <p class="text-sm text-gray-500 dark:text-gray-400 ml-6">{{ __('Administrators can manage other users and system settings') }}</p>
 
                         <div class="flex items-center">
-                            <input id="is_active" name="is_active" type="checkbox" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" {{ old('is_active', true) ? 'checked' : '' }}>
+                            <input id="is_active" name="is_active" type="checkbox" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" {{ old('is_active') ? 'checked' : 'checked' }}>
                             <label for="is_active" class="ml-2 block text-sm text-gray-900 dark:text-white">
                                 {{ __('Active user') }}
                             </label>
