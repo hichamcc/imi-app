@@ -187,12 +187,33 @@ class DriverController extends Controller
     private function getDriverDeclarations(array $driver): array
     {
         try {
-            // Get all declarations
-            $declarations = $this->declarationService->getDeclarationsPaginated(250);
-            $declarationsData = $declarations['items'] ?? $declarations ?? [];
+            // Get all declarations using pagination
+            $allDeclarations = [];
+            $startKey = null;
+
+            do {
+                $declarations = $this->declarationService->getDeclarationsPaginated(250, $startKey);
+                $currentDeclarations = $declarations['items'] ?? $declarations ?? [];
+
+                // Add current batch to all declarations
+                $allDeclarations = array_merge($allDeclarations, $currentDeclarations);
+
+                // Check if there are more pages
+                $startKey = $declarations['lastEvaluatedKey'] ?? null;
+
+            } while ($startKey);
+
+            $declarationsData = $allDeclarations;
 
             $driverFullName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
             $driverDateOfBirth = $driver['driverDateOfBirth'] ?? null;
+
+            \Log::info('Looking for declarations for driver', [
+                'driver_id' => $driver['driverId'] ?? 'no-id',
+                'driver_name' => $driverFullName,
+                'driver_dob' => $driverDateOfBirth,
+                'total_declarations_fetched' => count($declarationsData)
+            ]);
 
             $matchingDeclarations = [];
 
@@ -206,13 +227,26 @@ class DriverController extends Controller
                     if ($driverDateOfBirth && $declarationDateOfBirth) {
                         if ($driverDateOfBirth === $declarationDateOfBirth) {
                             $matchingDeclarations[] = $declaration;
+                            \Log::info('Declaration matched by name and DOB', [
+                                'declaration_id' => $declaration['declarationId'] ?? 'no-id',
+                                'status' => $declaration['declarationStatus'] ?? 'no-status'
+                            ]);
                         }
                     } else {
                         // If no date of birth available, match by name only
                         $matchingDeclarations[] = $declaration;
+                        \Log::info('Declaration matched by name only', [
+                            'declaration_id' => $declaration['declarationId'] ?? 'no-id',
+                            'status' => $declaration['declarationStatus'] ?? 'no-status'
+                        ]);
                     }
                 }
             }
+
+            \Log::info('Driver declarations matching complete', [
+                'driver_name' => $driverFullName,
+                'matching_declarations_count' => count($matchingDeclarations)
+            ]);
 
             // Sort declarations by creation date (newest first)
             usort($matchingDeclarations, function($a, $b) {
