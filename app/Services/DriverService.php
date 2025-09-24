@@ -89,12 +89,34 @@ class DriverService
         // Get active declarations
         $declarationEndpoint = config('posting.endpoints.declarations');
         try {
-            // First, try to get all declarations without status filter to see what we get
-            $declarations = $this->apiService->get($declarationEndpoint, [
-                'limit' => 250
-            ]);
+            // Fetch all declarations using pagination
+            $allDeclarations = [];
+            $startKey = null;
 
-            $declarationsData = $declarations['items'] ?? $declarations ?? [];
+            do {
+                $params = ['limit' => 250];
+                if ($startKey) {
+                    $params['startKey'] = $startKey;
+                }
+
+                $declarations = $this->apiService->get($declarationEndpoint, $params);
+                $currentDeclarations = $declarations['items'] ?? $declarations ?? [];
+
+                // Add current batch to all declarations
+                $allDeclarations = array_merge($allDeclarations, $currentDeclarations);
+
+                // Check if there are more pages
+                $startKey = $declarations['lastEvaluatedKey'] ?? null;
+
+                \Log::info('Fetching declarations batch', [
+                    'current_batch_size' => count($currentDeclarations),
+                    'total_fetched' => count($allDeclarations),
+                    'has_next_page' => !empty($startKey)
+                ]);
+
+            } while ($startKey);
+
+            $declarationsData = $allDeclarations;
 
 
             // Group declarations by driver ID and collect unique countries
