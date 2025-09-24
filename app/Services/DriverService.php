@@ -122,6 +122,43 @@ class DriverService
             // Group declarations by driver ID and collect unique countries
             $driverCountries = [];
 
+            // Log available driver names for debugging
+            $driverNames = [];
+            foreach ($drivers as $driver) {
+                $driverName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
+                $driverNames[] = [
+                    'id' => $driver['driverId'] ?? 'no-id',
+                    'name' => $driverName,
+                    'firstName' => $driver['driverLatinFirstName'] ?? 'no-first',
+                    'lastName' => $driver['driverLatinLastName'] ?? 'no-last'
+                ];
+            }
+
+            \Log::info('Available drivers for matching', [
+                'driver_names' => $driverNames,
+                'driver_count' => count($drivers)
+            ]);
+
+            // Log declaration names for debugging
+            $declarationNames = [];
+            $submittedCount = 0;
+            foreach ($declarationsData as $declaration) {
+                $status = $declaration['declarationStatus'] ?? null;
+                if ($status === 'SUBMITTED') {
+                    $submittedCount++;
+                    $declarationNames[] = [
+                        'fullName' => $declaration['driverLatinFullName'] ?? 'no-name',
+                        'country' => $declaration['declarationPostingCountry'] ?? 'no-country',
+                        'dateOfBirth' => $declaration['driverDateOfBirth'] ?? 'no-dob'
+                    ];
+                }
+            }
+
+            \Log::info('Submitted declarations for matching', [
+                'submitted_count' => $submittedCount,
+                'declaration_names' => array_slice($declarationNames, 0, 10) // First 10 for debugging
+            ]);
+
             foreach ($declarationsData as $declaration) {
                 $driverFullName = $declaration['driverLatinFullName'] ?? null;
                 $country = $declaration['declarationPostingCountry'] ?? null;
@@ -167,6 +204,19 @@ class DriverService
                             $driverCountries[$matchingDriverId] = [];
                         }
                         $driverCountries[$matchingDriverId][] = $country;
+
+                        \Log::info('Driver matched with declaration', [
+                            'driver_id' => $matchingDriverId,
+                            'driver_name' => trim(($matchedDriver['driverLatinFirstName'] ?? '') . ' ' . ($matchedDriver['driverLatinLastName'] ?? '')),
+                            'declaration_name' => $driverFullName,
+                            'country' => $country
+                        ]);
+                    } else {
+                        \Log::warning('No driver match found for declaration', [
+                            'declaration_name' => $driverFullName,
+                            'country' => $country,
+                            'available_drivers_count' => count($drivers)
+                        ]);
                     }
                 }
             }
