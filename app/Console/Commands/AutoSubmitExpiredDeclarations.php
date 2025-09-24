@@ -55,13 +55,13 @@ class AutoSubmitExpiredDeclarations extends Command
                     // Get all declarations for this user (API max limit is 250)
                     $declarations = $this->apiService->get('/declarations', ['limit' => 250]);
 
-                    if (isset($declarations['data']) && is_array($declarations['data'])) {
-                        foreach ($declarations['data'] as $declaration) {
+                    if (isset($declarations['items']) && is_array($declarations['items'])) {
+                        foreach ($declarations['items'] as $declaration) {
                             // Check if declaration expired yesterday and needs renewal
                             if ($this->shouldCreateNewDeclaration($declaration, $yesterday)) {
                                 $expiredCount++;
 
-                                $this->line("  - Found expired declaration: {$declaration['id']} (End date: {$declaration['end_date']})");
+                                $this->line("  - Found expired declaration: {$declaration['declarationId']} (End date: {$declaration['declarationEndDate']})");
 
                                 try {
                                     // Create new declaration with updated dates
@@ -71,8 +71,8 @@ class AutoSubmitExpiredDeclarations extends Command
 
                                     $createResult = $this->apiService->post('/declarations', $newDeclarationData);
 
-                                    if (isset($createResult['id']) || isset($createResult['data']['id'])) {
-                                        $newDeclarationId = $createResult['id'] ?? $createResult['data']['id'];
+                                    if (isset($createResult['declarationId'])) {
+                                        $newDeclarationId = $createResult['declarationId'];
                                         $createdCount++;
                                         $this->info("    ✓ Successfully created new declaration {$newDeclarationId}");
 
@@ -85,11 +85,11 @@ class AutoSubmitExpiredDeclarations extends Command
 
                                             Log::info('Auto-created and submitted new declaration for expired one', [
                                                 'user_id' => $user->id,
-                                                'original_declaration_id' => $declaration['id'],
+                                                'original_declaration_id' => $declaration['declarationId'],
                                                 'new_declaration_id' => $newDeclarationId,
-                                                'original_end_date' => $declaration['end_date'],
-                                                'new_start_date' => $newDeclarationData['start_date'],
-                                                'new_end_date' => $newDeclarationData['end_date'],
+                                                'original_end_date' => $declaration['declarationEndDate'],
+                                                'new_start_date' => $newDeclarationData['declarationStartDate'],
+                                                'new_end_date' => $newDeclarationData['declarationEndDate'],
                                                 'created_and_submitted_at' => now()
                                             ]);
                                         } else {
@@ -103,12 +103,12 @@ class AutoSubmitExpiredDeclarations extends Command
 
                                 } catch (\Exception $e) {
                                     $errorCount++;
-                                    $this->error("    ✗ Failed to create/submit new declaration for {$declaration['id']}: " . $e->getMessage());
+                                    $this->error("    ✗ Failed to create/submit new declaration for {$declaration['declarationId']}: " . $e->getMessage());
 
                                     Log::error('Failed to auto-create/submit new declaration', [
                                         'user_id' => $user->id,
-                                        'original_declaration_id' => $declaration['id'],
-                                        'original_end_date' => $declaration['end_date'],
+                                        'original_declaration_id' => $declaration['declarationId'],
+                                        'original_end_date' => $declaration['declarationEndDate'],
                                         'error' => $e->getMessage()
                                     ]);
                                 }
@@ -155,19 +155,19 @@ class AutoSubmitExpiredDeclarations extends Command
     private function shouldCreateNewDeclaration(array $declaration, string $yesterday): bool
     {
         // Check if declaration has an end date
-        if (!isset($declaration['end_date']) || empty($declaration['end_date'])) {
+        if (!isset($declaration['declarationEndDate']) || empty($declaration['declarationEndDate'])) {
             return false;
         }
 
         // Check if end date was yesterday
-        $endDate = Carbon::parse($declaration['end_date'])->format('Y-m-d');
+        $endDate = Carbon::parse($declaration['declarationEndDate'])->format('Y-m-d');
         if ($endDate !== $yesterday) {
             return false;
         }
 
         // Only process submitted declarations (not drafts)
-        $status = $declaration['status'] ?? '';
-        if (!in_array(strtolower($status), ['submitted', 'approved'])) {
+        $status = $declaration['declarationStatus'] ?? '';
+        if (!in_array(strtoupper($status), ['SUBMITTED'])) {
             return false;
         }
 
@@ -180,25 +180,37 @@ class AutoSubmitExpiredDeclarations extends Command
     private function prepareNewDeclarationData(array $originalDeclaration, string $newStartDate): array
     {
         // Calculate new end date (start today, end in 30 days - or same duration as original)
-        $originalStart = Carbon::parse($originalDeclaration['start_date']);
-        $originalEnd = Carbon::parse($originalDeclaration['end_date']);
+        $originalStart = Carbon::parse($originalDeclaration['declarationStartDate']);
+        $originalEnd = Carbon::parse($originalDeclaration['declarationEndDate']);
         $originalDuration = $originalStart->diffInDays($originalEnd);
 
         $newEndDate = Carbon::parse($newStartDate)->addDays($originalDuration)->format('Y-m-d');
 
-        // Prepare new declaration data - copy everything except dates and ID
-        $newData = $originalDeclaration;
+        // Prepare new declaration data - copy relevant fields only
+        $newData = [
+            'declarationPostingCountry' => $originalDeclaration['declarationPostingCountry'],
+            'declarationStartDate' => $newStartDate,
+            'declarationEndDate' => $newEndDate,
+            'declarationOperationType' => $originalDeclaration['declarationOperationType'] ?? ['INTERNATIONAL_CARRIAGE'],
+            'declarationTransportType' => $originalDeclaration['declarationTransportType'] ?? ['CARRIAGE_OF_GOODS'],
+            'declarationVehiclePlateNumber' => $originalDeclaration['declarationVehiclePlateNumber'] ?? [],
+            'driverId' => $originalDeclaration['driverId'],
+        ];
 
-        // Remove fields that shouldn't be copied
-        unset($newData['id']);
-        unset($newData['status']);
-        unset($newData['created_at']);
-        unset($newData['updated_at']);
-        unset($newData['submitted_at']);
+        // Add optional fields if they exist
+        $optionalFields = [
+            'otherContactAsTransportManager',
+            'otherContactFirstName',
+            'otherContactLastName',
+            'otherContactEmail',
+            'otherContactPhone'
+        ];
 
-        // Update dates
-        $newData['start_date'] = $newStartDate;
-        $newData['end_date'] = $newEndDate;
+        foreach ($optionalFields as $field) {
+            if (isset($originalDeclaration[$field])) {
+                $newData[$field] = $originalDeclaration[$field];
+            }
+        }
 
         return $newData;
     }
