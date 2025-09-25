@@ -26,6 +26,8 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     // Declaration Management Routes
     Route::resource('declarations', DeclarationController::class);
     Route::post('declarations/{declaration}/submit', [DeclarationController::class, 'submit'])->name('declarations.submit');
+    Route::get('declarations/{declaration}/edit-submitted', [DeclarationController::class, 'editSubmitted'])->name('declarations.edit-submitted');
+    Route::put('declarations/{declaration}/update-submitted', [DeclarationController::class, 'updateSubmitted'])->name('declarations.update-submitted');
     Route::post('declarations/{declaration}/withdraw', [DeclarationController::class, 'withdraw'])->name('declarations.withdraw');
     Route::post('declarations/{declaration}/print', [DeclarationController::class, 'print'])->name('declarations.print');
     Route::post('declarations/{declaration}/email', [DeclarationController::class, 'email'])->name('declarations.email');

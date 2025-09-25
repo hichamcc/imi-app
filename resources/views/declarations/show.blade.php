@@ -27,6 +27,9 @@
                         </button>
                     </form>
                 @elseif(($declaration['declarationStatus'] ?? '') === 'SUBMITTED')
+                    <a href="{{ route('declarations.edit-submitted', $declaration['declarationId']) }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                        {{ __('Edit Submitted Declaration') }}
+                    </a>
                     <form method="POST" action="{{ route('declarations.withdraw', $declaration['declarationId']) }}" class="inline-block">
                         @csrf
                         <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"

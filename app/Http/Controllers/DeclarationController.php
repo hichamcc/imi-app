@@ -287,6 +287,70 @@ class DeclarationController extends Controller
     }
 
     /**
+     * Show the form for editing a submitted declaration
+     */
+    public function editSubmitted(string $id)
+    {
+        try {
+            $declaration = $this->declarationService->getDeclaration($id);
+
+            // Check if declaration is actually submitted
+            if (($declaration['declarationStatus'] ?? '') !== 'SUBMITTED') {
+                return redirect()->route('declarations.edit', $id)
+                    ->with('info', 'This declaration is not submitted. Use regular edit form.');
+            }
+
+            return view('declarations.edit-submitted', compact('declaration'));
+        } catch (\Exception $e) {
+            return redirect()->route('declarations.index')
+                ->with('error', 'Failed to load declaration: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Update a submitted declaration (limited fields only)
+     */
+    public function updateSubmitted(Request $request, string $id)
+    {
+        // Validate only fields that can be updated for submitted declarations
+        $validated = $request->validate([
+            'declarationEndDate' => 'required|date|date_format:Y-m-d',
+            'declarationOperationType' => 'required|array|min:1|max:2',
+            'declarationOperationType.*' => 'string|in:CABOTAGE_OPERATIONS,INTERNATIONAL_CARRIAGE',
+            'declarationTransportType' => 'required|array|min:1|max:2',
+            'declarationTransportType.*' => 'string|in:CARRIAGE_OF_GOODS,CARRIAGE_OF_PASSENGERS',
+            'declarationVehiclePlateNumber' => 'required|array|min:1',
+            'declarationVehiclePlateNumber.*' => 'string|max:20',
+            'otherContactAsTransportManager' => 'boolean',
+            'otherContactFirstName' => 'nullable|string|max:255',
+            'otherContactLastName' => 'nullable|string|max:255',
+            'otherContactEmail' => 'nullable|email|max:255',
+            'otherContactPhone' => 'nullable|string|max:20',
+            'otherContactAddressStreet' => 'nullable|string|max:255',
+            'otherContactAddressCity' => 'nullable|string|max:100',
+            'otherContactAddressCountry' => 'nullable|string|size:2',
+            'otherContactAddressPostCode' => 'nullable|string|max:20',
+            'driverEmail' => 'nullable|email|max:255',
+        ]);
+
+        // Clean up array values
+        $validated['declarationVehiclePlateNumber'] = array_filter($validated['declarationVehiclePlateNumber']);
+
+        // Convert checkbox to boolean for API
+        $validated['otherContactAsTransportManager'] = isset($validated['otherContactAsTransportManager']) && $validated['otherContactAsTransportManager'];
+
+        try {
+            $declaration = $this->declarationService->updateSubmittedDeclaration($id, $validated);
+            return redirect()->route('declarations.show', $id)
+                ->with('success', 'Submitted declaration updated successfully!');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Failed to update submitted declaration: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Submit a declaration
      */
     public function submit(string $id)
