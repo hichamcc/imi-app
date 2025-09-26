@@ -73,8 +73,40 @@ class AutoSubmitExpiredDeclarations extends Command
                         $user->api_operator_id
                     );
 
-                    // Get all declarations for this user (API max limit is 250)
-                    $declarations = $this->apiService->get('/declarations', ['limit' => 250]);
+                    // Get ALL declarations for this user using pagination
+                    $allDeclarations = [];
+                    $startKey = null;
+
+                    do {
+                        $params = ['limit' => 250];
+                        if ($startKey) {
+                            $params['startKey'] = $startKey;
+                        }
+
+                        $declarationsBatch = $this->apiService->get('/declarations', $params);
+                        $currentDeclarations = $declarationsBatch['items'] ?? [];
+
+                        // Add current batch to all declarations
+                        $allDeclarations = array_merge($allDeclarations, $currentDeclarations);
+
+                        // Check if there are more pages
+                        $startKey = $declarationsBatch['lastEvaluatedKey'] ?? null;
+
+                        Log::info('AUTO-SUBMIT: Fetching declarations batch', [
+                            'user_id' => $user->id,
+                            'current_batch_size' => count($currentDeclarations),
+                            'total_fetched' => count($allDeclarations),
+                            'has_next_page' => !empty($startKey)
+                        ]);
+
+                    } while ($startKey);
+
+                    // Create the declarations array in the expected format
+                    $declarations = [
+                        'count' => count($allDeclarations),
+                        'items' => $allDeclarations,
+                        'lastEvaluatedKey' => null
+                    ];
 
                     Log::info('AUTO-SUBMIT: Declarations fetched for user', [
                         'user_id' => $user->id,
@@ -83,6 +115,21 @@ class AutoSubmitExpiredDeclarations extends Command
                     ]);
 
                     if (isset($declarations['items']) && is_array($declarations['items'])) {
+                        // Log some sample declarations for debugging
+                        $sampleDeclarations = array_slice($declarations['items'], 0, 3);
+                        Log::info('AUTO-SUBMIT: Sample declarations', [
+                            'user_id' => $user->id,
+                            'yesterday_target' => $yesterday,
+                            'sample_declarations' => array_map(function($decl) {
+                                return [
+                                    'id' => $decl['declarationId'] ?? 'no-id',
+                                    'status' => $decl['declarationStatus'] ?? 'no-status',
+                                    'end_date' => $decl['declarationEndDate'] ?? 'no-end-date',
+                                    'start_date' => $decl['declarationStartDate'] ?? 'no-start-date'
+                                ];
+                            }, $sampleDeclarations)
+                        ]);
+
                         foreach ($declarations['items'] as $declaration) {
                             // Check if declaration expired yesterday and needs renewal
                             if ($this->shouldCreateNewDeclaration($declaration, $yesterday)) {
@@ -91,10 +138,17 @@ class AutoSubmitExpiredDeclarations extends Command
                                 $this->line("  - Found expired declaration: {$declaration['declarationId']} (End date: {$declaration['declarationEndDate']})");
 
                                 try {
-                                    // Create new declaration with updated dates
-                                    $newDeclarationData = $this->prepareNewDeclarationData($declaration, $today);
+                                    // Fetch full declaration details to get driverId and other required fields
+                                    $fullDeclaration = $this->apiService->get("/declarations/{$declaration['declarationId']}");
 
-                                    $this->line("    Creating new declaration with start date: {$newDeclarationData['start_date']} and end date: {$newDeclarationData['end_date']}");
+                                    if (!isset($fullDeclaration['driverId'])) {
+                                        throw new \Exception('Full declaration data does not contain driverId');
+                                    }
+
+                                    // Create new declaration with updated dates using full declaration data
+                                    $newDeclarationData = $this->prepareNewDeclarationData($fullDeclaration, $today);
+
+                                    $this->line("    Creating new declaration with start date: {$newDeclarationData['declarationStartDate']} and end date: {$newDeclarationData['declarationEndDate']}");
 
                                     $createResult = $this->apiService->post('/declarations', $newDeclarationData);
 
@@ -187,22 +241,46 @@ class AutoSubmitExpiredDeclarations extends Command
      */
     private function shouldCreateNewDeclaration(array $declaration, string $yesterday): bool
     {
+        $declarationId = $declaration['declarationId'] ?? 'unknown';
+
         // Check if declaration has an end date
         if (!isset($declaration['declarationEndDate']) || empty($declaration['declarationEndDate'])) {
+            Log::debug('AUTO-SUBMIT: Declaration skipped - no end date', [
+                'declaration_id' => $declarationId,
+                'reason' => 'missing_end_date'
+            ]);
             return false;
         }
 
-        // Check if end date was yesterday
+        // Check if end date was exactly yesterday
         $endDate = Carbon::parse($declaration['declarationEndDate'])->format('Y-m-d');
         if ($endDate !== $yesterday) {
+            Log::debug('AUTO-SUBMIT: Declaration skipped - end date mismatch', [
+                'declaration_id' => $declarationId,
+                'end_date' => $endDate,
+                'target_date' => $yesterday,
+                'reason' => 'end_date_not_yesterday'
+            ]);
             return false;
         }
 
-        // Only process submitted declarations (not drafts)
+        // Only process expired declarations
         $status = $declaration['declarationStatus'] ?? '';
-        if (!in_array(strtoupper($status), ['SUBMITTED'])) {
+        if (strtoupper($status) !== 'EXPIRED') {
+            Log::debug('AUTO-SUBMIT: Declaration skipped - wrong status', [
+                'declaration_id' => $declarationId,
+                'status' => $status,
+                'required_status' => 'EXPIRED',
+                'reason' => 'status_not_expired'
+            ]);
             return false;
         }
+
+        Log::info('AUTO-SUBMIT: Declaration eligible for renewal', [
+            'declaration_id' => $declarationId,
+            'end_date' => $endDate,
+            'status' => $status
+        ]);
 
         return true;
     }
