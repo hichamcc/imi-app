@@ -203,10 +203,26 @@
                                                 {{ $declaration['declarationEndDate'] ?? 'N/A' }}
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                <a href="{{ route('declarations.show', $declaration['declarationId']) }}"
-                                                   class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">
-                                                    {{ __('View') }}
-                                                </a>
+                                                <div class="flex space-x-2">
+                                                    <a href="{{ route('declarations.show', $declaration['declarationId']) }}"
+                                                       class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">
+                                                        {{ __('View') }}
+                                                    </a>
+
+                                                    @if(($declaration['declarationStatus'] ?? '') === 'SUBMITTED')
+                                                        <span class="text-gray-300 dark:text-gray-600">|</span>
+                                                        <a href="{{ route('declarations.edit-submitted', $declaration['declarationId']) }}"
+                                                           class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">
+                                                            {{ __('Update') }}
+                                                        </a>
+                                                    @elseif(($declaration['declarationStatus'] ?? '') === 'DRAFT')
+                                                        <span class="text-gray-300 dark:text-gray-600">|</span>
+                                                        <a href="{{ route('declarations.edit', $declaration['declarationId']) }}"
+                                                           class="text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300">
+                                                            {{ __('Edit') }}
+                                                        </a>
+                                                    @endif
+                                                </div>
                                             </td>
                                         </tr>
                                     @endforeach
