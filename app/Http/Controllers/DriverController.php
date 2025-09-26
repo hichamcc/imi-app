@@ -46,15 +46,7 @@ class DriverController extends Controller
         try {
             $drivers = $this->driverService->getDriversPaginated($limit, $startKey, $filters);
 
-            // Log the driver list API result
-            \Log::info('Driver List API Result', [
-                'user_id' => auth()->id(),
-                'filters' => $filters,
-                'limit' => $limit,
-                'startKey' => $startKey,
-                'api_response' => $drivers,
-                'driver_count' => isset($drivers['items']) ? count($drivers['items']) : (is_array($drivers) ? count($drivers) : 0)
-            ]);
+      
 
             // Add active declaration countries to drivers
             if (isset($drivers['items'])) {
@@ -208,13 +200,6 @@ class DriverController extends Controller
             $driverFullName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
             $driverDateOfBirth = $driver['driverDateOfBirth'] ?? null;
 
-            \Log::info('Looking for declarations for driver', [
-                'driver_id' => $driver['driverId'] ?? 'no-id',
-                'driver_name' => $driverFullName,
-                'driver_dob' => $driverDateOfBirth,
-                'total_declarations_fetched' => count($declarationsData)
-            ]);
-
             $matchingDeclarations = [];
 
             foreach ($declarationsData as $declaration) {
@@ -227,26 +212,16 @@ class DriverController extends Controller
                     if ($driverDateOfBirth && $declarationDateOfBirth) {
                         if ($driverDateOfBirth === $declarationDateOfBirth) {
                             $matchingDeclarations[] = $declaration;
-                            \Log::info('Declaration matched by name and DOB', [
-                                'declaration_id' => $declaration['declarationId'] ?? 'no-id',
-                                'status' => $declaration['declarationStatus'] ?? 'no-status'
-                            ]);
                         }
                     } else {
                         // If no date of birth available, match by name only
                         $matchingDeclarations[] = $declaration;
-                        \Log::info('Declaration matched by name only', [
-                            'declaration_id' => $declaration['declarationId'] ?? 'no-id',
-                            'status' => $declaration['declarationStatus'] ?? 'no-status'
-                        ]);
+                       
                     }
                 }
             }
 
-            \Log::info('Driver declarations matching complete', [
-                'driver_name' => $driverFullName,
-                'matching_declarations_count' => count($matchingDeclarations)
-            ]);
+           
 
             // Sort declarations by creation date (newest first)
             usort($matchingDeclarations, function($a, $b) {
@@ -257,10 +232,7 @@ class DriverController extends Controller
 
             return $matchingDeclarations;
         } catch (\Exception $e) {
-            \Log::error('Failed to fetch driver declarations', [
-                'driver_id' => $driver['driverId'] ?? 'unknown',
-                'error' => $e->getMessage()
-            ]);
+          
             return [];
         }
     }

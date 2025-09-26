@@ -22,7 +22,17 @@ class AutoSubmitExpiredDeclarations extends Command
 
     public function handle()
     {
+        $startTime = microtime(true);
         $this->info('Starting auto-submit process for expired declarations...');
+
+        // Log the start of the process
+        Log::info('AUTO-SUBMIT: Process started', [
+            'started_at' => now()->toDateTimeString(),
+            'yesterday' => Carbon::yesterday()->format('Y-m-d'),
+            'today' => Carbon::today()->format('Y-m-d'),
+            'process_id' => getmypid(),
+            'memory_usage' => memory_get_usage(true) / 1024 / 1024 . ' MB'
+        ]);
 
         $yesterday = Carbon::yesterday()->format('Y-m-d');
         $today = Carbon::today()->format('Y-m-d');
@@ -41,8 +51,19 @@ class AutoSubmitExpiredDeclarations extends Command
 
             $this->info("Found {$users->count()} users with valid API credentials");
 
+            Log::info('AUTO-SUBMIT: Users found', [
+                'user_count' => $users->count(),
+                'user_ids' => $users->pluck('id')->toArray()
+            ]);
+
             foreach ($users as $user) {
                 $this->line("Processing user: {$user->name} (ID: {$user->id})");
+
+                Log::info('AUTO-SUBMIT: Processing user', [
+                    'user_id' => $user->id,
+                    'user_name' => $user->name,
+                    'user_email' => $user->email
+                ]);
 
                 try {
                     // Set user credentials for API service
@@ -54,6 +75,12 @@ class AutoSubmitExpiredDeclarations extends Command
 
                     // Get all declarations for this user (API max limit is 250)
                     $declarations = $this->apiService->get('/declarations', ['limit' => 250]);
+
+                    Log::info('AUTO-SUBMIT: Declarations fetched for user', [
+                        'user_id' => $user->id,
+                        'declarations_count' => isset($declarations['items']) ? count($declarations['items']) : 0,
+                        'api_response_structure' => array_keys($declarations ?? [])
+                    ]);
 
                     if (isset($declarations['items']) && is_array($declarations['items'])) {
                         foreach ($declarations['items'] as $declaration) {
@@ -132,18 +159,24 @@ class AutoSubmitExpiredDeclarations extends Command
         }
 
         // Summary
+        $executionTime = round((microtime(true) - $startTime), 2);
         $this->newLine();
         $this->info('Auto-submit process completed:');
         $this->line("  - Expired declarations found: {$expiredCount}");
         $this->line("  - New declarations created: {$createdCount}");
         $this->line("  - New declarations submitted: {$submittedCount}");
         $this->line("  - Errors: {$errorCount}");
+        $this->line("  - Execution time: {$executionTime} seconds");
 
-        Log::info('Auto-submit process completed', [
+        Log::info('AUTO-SUBMIT: Process completed', [
+            'completed_at' => now()->toDateTimeString(),
             'expired_count' => $expiredCount,
             'created_count' => $createdCount,
             'submitted_count' => $submittedCount,
-            'error_count' => $errorCount
+            'error_count' => $errorCount,
+            'execution_time_seconds' => $executionTime,
+            'peak_memory_usage_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2),
+            'success_rate' => $expiredCount > 0 ? round(($submittedCount / $expiredCount) * 100, 2) . '%' : '100%'
         ]);
 
         return 0;

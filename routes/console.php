@@ -10,6 +10,6 @@ Artisan::command('inspire', function () {
 
 // Schedule auto-submit of expired declarations
 Schedule::command('declarations:auto-submit')
-    ->dailyAt('09:00')
+    ->dailyAt('09:20')
     ->withoutOverlapping()
     ->runInBackground();
