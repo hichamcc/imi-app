@@ -300,7 +300,15 @@ class DeclarationController extends Controller
                     ->with('info', 'This declaration is not submitted. Use regular edit form.');
             }
 
-            return view('declarations.edit-submitted', compact('declaration'));
+            // Get user's trucks for plate selection
+            $trucks = auth()->user()->trucks()->where('status', 'available')->get();
+
+            // Check for plates in declaration that don't exist in user's trucks
+            $declarationPlates = $declaration['declarationVehiclePlateNumber'] ?? [];
+            $existingPlates = $trucks->pluck('plate')->toArray();
+            $missingPlates = array_diff($declarationPlates, $existingPlates);
+
+            return view('declarations.edit-submitted', compact('declaration', 'trucks', 'missingPlates'));
         } catch (\Exception $e) {
             return redirect()->route('declarations.index')
                 ->with('error', 'Failed to load declaration: ' . $e->getMessage());

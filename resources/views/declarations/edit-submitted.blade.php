@@ -140,31 +140,67 @@
                     <div class="mb-6">
                         <x-field>
                             <x-label for="declarationVehiclePlateNumber">{{ __('Vehicle Plate Numbers') }} <span class="text-red-500">*</span></x-label>
-                            <div id="plateNumberContainer" class="space-y-2">
-                                @php
-                                    $plateNumbers = old('declarationVehiclePlateNumber', $declaration['declarationVehiclePlateNumber'] ?? ['']);
-                                    if (empty($plateNumbers)) $plateNumbers = [''];
-                                @endphp
-                                @foreach($plateNumbers as $index => $plateNumber)
-                                    <div class="flex gap-2">
-                                        <x-input
-                                            type="text"
-                                            name="declarationVehiclePlateNumber[]"
-                                            value="{{ $plateNumber ?? '' }}"
-                                            placeholder="{{ __('Enter vehicle plate number') }}"
-                                            class="flex-1"
-                                        />
-                                        @if($index > 0)
-                                            <button type="button" onclick="removeVehiclePlate(this)" class="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600">
-                                                <x-phosphor-minus class="w-4 h-4" />
-                                            </button>
-                                        @endif
+
+                            @if(!empty($missingPlates))
+                                <div class="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                                    <div class="flex">
+                                        <x-phosphor-warning class="h-5 w-5 text-yellow-400 mr-2 mt-0.5" />
+                                        <div>
+                                            <p class="text-sm text-yellow-700 dark:text-yellow-200 font-medium">
+                                                {{ __('Some plates from API not found in your trucks') }}:
+                                            </p>
+                                            <p class="text-sm text-yellow-600 dark:text-yellow-300 mt-1">
+                                                {{ implode(', ', $missingPlates) }}
+                                            </p>
+                                            <p class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                                                {{ __('These plates will be added as text inputs below the truck selection.') }}
+                                            </p>
+                                        </div>
                                     </div>
-                                @endforeach
-                            </div>
-                            <button type="button" onclick="addVehiclePlate()" class="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-                                <x-phosphor-plus class="w-4 h-4 inline mr-1" /> {{ __('Add Vehicle') }}
-                            </button>
+                                </div>
+                            @endif
+
+                            @if($trucks->count() > 0)
+                                <div class="mb-4">
+                                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">{{ __('Select from your available trucks:') }}</p>
+                                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                                        @foreach($trucks as $truck)
+                                            @php
+                                                $selectedPlates = old('declarationVehiclePlateNumber', $declaration['declarationVehiclePlateNumber'] ?? []);
+                                                if (!is_array($selectedPlates)) $selectedPlates = [$selectedPlates];
+                                            @endphp
+                                            <label class="flex items-center">
+                                                <input type="checkbox"
+                                                       name="declarationVehiclePlateNumber[]"
+                                                       value="{{ $truck->plate }}"
+                                                       class="plate-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                       {{ in_array($truck->plate, $selectedPlates) ? 'checked' : '' }}>
+                                                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ $truck->plate }} - {{ $truck->name }}</span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+
+                            @if(!empty($missingPlates))
+                                <div class="mb-4">
+                                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">{{ __('Plates from API not in your truck database:') }}</p>
+                                    @foreach($missingPlates as $missingPlate)
+                                        <div class="flex items-center mb-2">
+                                            <input type="hidden" name="declarationVehiclePlateNumber[]" value="{{ $missingPlate }}">
+                                            <input
+                                                type="text"
+                                                value="{{ $missingPlate }}"
+                                                readonly
+                                                class="flex-1 rounded-md border-gray-300 bg-gray-100 dark:bg-gray-600 dark:border-gray-600 dark:text-white px-3 py-2"
+                                            />
+                                            <span class="ml-2 text-sm text-gray-500 dark:text-gray-400">{{ __('(from API)') }}</span>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+
+                            <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('Select one or more vehicle plates for this declaration.') }}</p>
                             <x-error for="declarationVehiclePlateNumber" />
                         </x-field>
                     </div>
@@ -268,23 +304,4 @@
         </div>
     </div>
 
-    <script>
-        function addVehiclePlate() {
-            const container = document.getElementById('plateNumberContainer');
-            const div = document.createElement('div');
-            div.className = 'flex gap-2';
-            div.innerHTML = `
-                <input type="text" name="declarationVehiclePlateNumber[]" placeholder="{{ __('Enter vehicle plate number') }}"
-                       class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                <button type="button" onclick="removeVehiclePlate(this)" class="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128Z"></path></svg>
-                </button>
-            `;
-            container.appendChild(div);
-        }
-
-        function removeVehiclePlate(button) {
-            button.parentElement.remove();
-        }
-    </script>
 </x-layouts.app>
