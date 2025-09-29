@@ -30,6 +30,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::put('declarations/{declaration}/update-submitted', [DeclarationController::class, 'updateSubmitted'])->name('declarations.update-submitted');
     Route::post('declarations/{declaration}/withdraw', [DeclarationController::class, 'withdraw'])->name('declarations.withdraw');
     Route::post('declarations/{declaration}/print', [DeclarationController::class, 'print'])->name('declarations.print');
+
     Route::post('declarations/{declaration}/email', [DeclarationController::class, 'email'])->name('declarations.email');
     Route::get('declarations/driver/{driver}/truck-plates', [DeclarationController::class, 'getDriverTruckPlates'])->name('declarations.driver-truck-plates');
 
@@ -39,6 +40,17 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::post('trucks-import', [TruckController::class, 'processImport'])->name('trucks.process-import');
     Route::post('trucks/{truck}/assign-driver', [TruckController::class, 'assignDriver'])->name('trucks.assign-driver');
     Route::delete('truck-assignments/{assignment}', [TruckController::class, 'unassignDriver'])->name('trucks.unassign-driver');
+});
+
+// Bulk Declaration Update Routes - Using different path to avoid API interception
+Route::middleware(['auth'])->prefix('bulk-update')->name('declarations.bulk-update.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\BulkDeclarationController::class, 'index'])->name('index');
+    Route::post('/step2', [\App\Http\Controllers\BulkDeclarationController::class, 'step2'])->name('step2');
+    Route::post('/step3', [\App\Http\Controllers\BulkDeclarationController::class, 'step3'])->name('step3');
+    Route::post('/step4', [\App\Http\Controllers\BulkDeclarationController::class, 'step4'])->name('step4');
+    Route::post('/step5', [\App\Http\Controllers\BulkDeclarationController::class, 'step5'])->name('step5');
+    Route::post('/execute', [\App\Http\Controllers\BulkDeclarationController::class, 'execute'])->name('execute');
+    Route::post('/process-declaration', [\App\Http\Controllers\BulkDeclarationController::class, 'processDeclaration'])->name('process-declaration');
 });
 
 Route::middleware(['auth'])->group(function () {

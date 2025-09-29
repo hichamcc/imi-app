@@ -34,8 +34,11 @@
                         <x-navlist.item before="phosphor-truck" :href="route('trucks.index')" :current="request()->routeIs('trucks.*')">
                             {{ __('Trucks') }}
                         </x-navlist.item>
-                        <x-navlist.item before="phosphor-file-text" :href="route('declarations.index')" :current="request()->routeIs('declarations.*')">
+                        <x-navlist.item before="phosphor-file-text" :href="route('declarations.index')" :current="request()->routeIs('declarations.*') && !request()->routeIs('declarations.bulk-update.*')">
                             {{ __('Declarations') }}
+                        </x-navlist.item>
+                        <x-navlist.item before="phosphor-arrows-merge" :href="route('declarations.bulk-update.index')" :current="request()->routeIs('declarations.bulk-update.*')">
+                            {{ __('Bulk Update') }}
                         </x-navlist.item>
                     </x-navlist.group>
                 @endif
