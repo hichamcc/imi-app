@@ -83,7 +83,6 @@
                                 <option value="">{{ __('Select Document Type') }}</option>
                                 <option value="IDCARD" {{ old('driverDocumentType') == 'IDCARD' ? 'selected' : '' }}>{{ __('ID Card') }}</option>
                                 <option value="PASSPORT" {{ old('driverDocumentType') == 'PASSPORT' ? 'selected' : '' }}>{{ __('Passport') }}</option>
-                                <option value="DRIVINGLICENSE" {{ old('driverDocumentType') == 'DRIVINGLICENSE' ? 'selected' : '' }}>{{ __('Driving License') }}</option>
                             </x-select>
                             <x-error for="driverDocumentType" />
                         </x-field>
