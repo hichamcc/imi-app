@@ -91,8 +91,8 @@ class DeclarationService
         $endpoint = "/declarations/{$declarationId}/email";
 
         $data = [
-            'emailAddress' => $emailAddress,
-            'declarationLanguage' => $language
+            'email' => $emailAddress,
+            'language' => $language
         ];
 
         return $this->apiService->post($endpoint, $data);
@@ -106,7 +106,7 @@ class DeclarationService
         $endpoint = "/declarations/{$declarationId}/print";
 
         $data = [
-            'declarationLanguage' => $language
+            'language' => $language
         ];
 
         return $this->apiService->post($endpoint, $data);

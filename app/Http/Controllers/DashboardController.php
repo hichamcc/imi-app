@@ -25,6 +25,12 @@ class DashboardController extends Controller
      */
     public function index()
     {
+        // Check if user is admin and show impersonation dashboard
+        if (auth()->user()->isAdmin()) {
+            $users = \App\Models\User::where('is_admin', false)->active()->get();
+            return view('dashboard', compact('users'));
+        }
+
         try {
             // Fetch drivers to calculate statistics
             $drivers = $this->driverService->getDriversPaginated(50);

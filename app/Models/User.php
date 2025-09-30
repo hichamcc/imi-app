@@ -7,11 +7,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
+use Lab404\Impersonate\Models\Impersonate;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, Impersonate;
 
     /**
      * The attributes that are mass assignable.
@@ -119,5 +120,21 @@ class User extends Authenticatable
     public function trucks()
     {
         return $this->hasMany(\App\Models\Truck::class);
+    }
+
+    /**
+     * Can this user impersonate other users
+     */
+    public function canImpersonate(): bool
+    {
+        return $this->isAdmin();
+    }
+
+    /**
+     * Can this user be impersonated by others
+     */
+    public function canBeImpersonated(): bool
+    {
+        return !$this->isAdmin() && $this->is_active;
     }
 }

@@ -16,6 +16,9 @@
             <x-navlist>
                 @if(auth()->user()->isAdmin())
                     <x-navlist.group :heading="__('Administration')">
+                        <x-navlist.item before="phosphor-house-line" :href="route('dashboard')" :current="request()->routeIs('dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-navlist.item>
                         <x-navlist.item before="phosphor-user-gear" :href="route('admin.users.index')" :current="request()->routeIs('admin.users.*')">
                             {{ __('User Management') }}
                         </x-navlist.item>
@@ -72,10 +75,24 @@
                         <div class="grid flex-1 text-left text-sm leading-tight">
                             <span class="truncate font-semibold">{{ auth()->user()->name }}</span>
                             <span class="truncate text-xs">{{ auth()->user()->email }}</span>
+                            @if(auth()->user()->isImpersonated())
+                                <span class="truncate text-xs text-orange-600 dark:text-orange-400 font-medium">
+                                    {{ __('Impersonating') }}
+                                </span>
+                            @endif
                         </div>
                     </div>
                     <x-popover.separator />
                     <x-popover.item before="phosphor-gear-fine" href="/settings/profile">{{ __('Settings') }}</x-popover.item>
+                    @if(auth()->user()->isAdmin())
+                        <x-popover.item before="phosphor-users" href="{{ route('admin.impersonate') }}">{{ __('User Management') }}</x-popover.item>
+                    @endif
+                    @if(auth()->user()->isImpersonated())
+                        <x-form method="post" action="{{ route('leave-impersonation') }}" class="w-full flex">
+                            @csrf
+                            <x-popover.item before="phosphor-sign-out" class="text-orange-600 dark:text-orange-400">{{ __('Stop Impersonating') }}</x-popover.item>
+                        </x-form>
+                    @endif
                     <x-popover.separator />
                     <x-form method="post" action="{{ route('logout') }}" class="w-full flex">
                         <x-popover.item before="phosphor-sign-out">{{ __('Log Out') }}</x-popover.item>

@@ -12,6 +12,7 @@
     "require": {
         "php": "^8.2",
         "codeat3/blade-phosphor-icons": "^2.3",
+        "lab404/laravel-impersonate": "^1.7",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1"
     },

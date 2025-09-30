@@ -19,6 +19,30 @@ Route::get('contact-admin', function () {
     return view('contact-admin');
 })->middleware(['auth'])->name('contact-admin');
 
+// Impersonation Routes (Admin only)
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::post('impersonate/{user}', function (\App\Models\User $user) {
+        if (!auth()->user()->canImpersonate() || !$user->canBeImpersonated()) {
+            abort(403, 'Cannot impersonate this user.');
+        }
+        auth()->user()->impersonate($user);
+        return redirect()->route('dashboard')->with('success', "Now impersonating {$user->name}");
+    })->name('impersonate');
+
+    Route::get('admin/impersonate', function () {
+        $users = \App\Models\User::where('is_admin', false)->active()->get();
+        return view('admin.users', compact('users'));
+    })->name('admin.impersonate');
+});
+
+Route::post('leave-impersonation', function () {
+    if (auth()->user()->isImpersonated()) {
+        auth()->user()->leaveImpersonation();
+        return redirect()->route('dashboard')->with('success', 'Stopped impersonating user');
+    }
+    return redirect()->route('dashboard');
+})->middleware(['auth'])->name('leave-impersonation');
+
 Route::middleware(['auth', 'api.credentials'])->group(function () {
     // Driver Management Routes
     Route::resource('drivers', DriverController::class);
