@@ -25,6 +25,10 @@ Route::middleware(['auth', 'admin'])->group(function () {
         if (!auth()->user()->canImpersonate() || !$user->canBeImpersonated()) {
             abort(403, 'Cannot impersonate this user.');
         }
+
+        // Clear cache before impersonation to ensure fresh API data
+        \Illuminate\Support\Facades\Artisan::call('cache:clear');
+
         auth()->user()->impersonate($user);
         return redirect()->route('dashboard')->with('success', "Now impersonating {$user->name}");
     })->name('impersonate');
@@ -37,6 +41,9 @@ Route::middleware(['auth', 'admin'])->group(function () {
 
 Route::post('leave-impersonation', function () {
     if (auth()->user()->isImpersonated()) {
+        // Clear cache before leaving impersonation to ensure fresh API data
+        \Illuminate\Support\Facades\Artisan::call('cache:clear');
+
         auth()->user()->leaveImpersonation();
         return redirect()->route('dashboard')->with('success', 'Stopped impersonating user');
     }
