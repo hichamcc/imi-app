@@ -25,10 +25,14 @@ class DashboardController extends Controller
      */
     public function index()
     {
+        // Get users this user can impersonate (works regardless of API credentials)
+        $impersonatableUsers = auth()->user()->getImpersonatableUsers();
+
         // Check if user is admin and show impersonation dashboard
         if (auth()->user()->isAdmin()) {
             $users = \App\Models\User::where('is_admin', false)->active()->get();
-            return view('dashboard', compact('users'));
+            $groups = \App\Models\UserGroup::with(['users', 'creator'])->get();
+            return view('dashboard', compact('users', 'groups', 'impersonatableUsers'));
         }
 
         try {
@@ -74,9 +78,12 @@ class DashboardController extends Controller
                 'fleetUtilization' => $truckStats['utilization_percentage'] ?? 0,
             ];
 
-            return view('dashboard', compact('stats'));
+            return view('dashboard', compact('stats', 'impersonatableUsers'));
 
         } catch (\Exception $e) {
+            // Log the exception
+            \Log::error('Dashboard exception for user ' . auth()->user()->name . ': ' . $e->getMessage());
+
             // Fallback to placeholder values if API fails
             $stats = [
                 'totalDrivers' => '--',
@@ -96,7 +103,7 @@ class DashboardController extends Controller
                 'fleetUtilization' => '--',
             ];
 
-            return view('dashboard', compact('stats'))->with('error', 'Failed to load statistics: ' . $e->getMessage());
+            return view('dashboard', compact('stats', 'impersonatableUsers'))->with('error', 'Failed to load statistics: ' . $e->getMessage());
         }
     }
 

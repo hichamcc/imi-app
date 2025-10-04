@@ -123,11 +123,34 @@ class User extends Authenticatable
     }
 
     /**
+     * Groups this user belongs to
+     */
+    public function userGroups()
+    {
+        return $this->belongsToMany(\App\Models\UserGroup::class, 'user_group_memberships')
+            ->withPivot(['assigned_by', 'assigned_at'])
+            ->withTimestamps();
+    }
+
+    /**
+     * Groups created by this user (admin)
+     */
+    public function createdGroups()
+    {
+        return $this->hasMany(\App\Models\UserGroup::class, 'created_by');
+    }
+
+    /**
      * Can this user impersonate other users
      */
     public function canImpersonate(): bool
     {
-        return $this->isAdmin();
+        if ($this->isAdmin()) {
+            return true;
+        }
+
+        // Check if user belongs to any groups
+        return $this->userGroups()->exists();
     }
 
     /**
@@ -136,5 +159,52 @@ class User extends Authenticatable
     public function canBeImpersonated(): bool
     {
         return !$this->isAdmin() && $this->is_active;
+    }
+
+    /**
+     * Get users this user can impersonate (from shared groups)
+     */
+    public function getImpersonatableUsers()
+    {
+        if ($this->isAdmin()) {
+            // Admins can impersonate anyone
+            return User::where('is_admin', false)->active()->get();
+        }
+
+        // Get all groups this user belongs to
+        $userGroupIds = $this->userGroups()->pluck('user_groups.id');
+
+        if ($userGroupIds->isEmpty()) {
+            return collect(); // No groups, can't impersonate anyone
+        }
+
+        // Get all users from the same groups (excluding self and admins)
+        return User::whereHas('userGroups', function ($query) use ($userGroupIds) {
+            $query->whereIn('user_groups.id', $userGroupIds);
+        })
+        ->where('id', '!=', $this->id)
+        ->where('is_admin', false)
+        ->active()
+        ->get();
+    }
+
+    /**
+     * Check if this user can impersonate a specific user
+     */
+    public function canImpersonateUser(User $targetUser): bool
+    {
+        if ($this->isAdmin()) {
+            return $targetUser->canBeImpersonated();
+        }
+
+        if (!$targetUser->canBeImpersonated()) {
+            return false;
+        }
+
+        // Check if they share any groups
+        $myGroupIds = $this->userGroups()->pluck('user_groups.id');
+        $targetGroupIds = $targetUser->userGroups()->pluck('user_groups.id');
+
+        return $myGroupIds->intersect($targetGroupIds)->isNotEmpty();
     }
 }

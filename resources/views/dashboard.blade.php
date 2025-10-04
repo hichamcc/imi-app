@@ -98,6 +98,83 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Group Management Section -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+                        {{ __('Group Management') }} ({{ $groups->count() }})
+                    </h3>
+                    <button onclick="showCreateGroupModal()" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors">
+                        <x-phosphor-plus class="w-4 h-4 mr-1" />
+                        {{ __('Create Group') }}
+                    </button>
+                </div>
+
+                @if($groups->count() > 0)
+                    <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                        @foreach($groups as $group)
+                            <div class="px-6 py-4">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex-1">
+                                        <div class="flex items-center">
+                                            <h4 class="text-sm font-medium text-gray-900 dark:text-white">
+                                                {{ $group->name }}
+                                                @unless($group->is_active)
+                                                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100">
+                                                        Inactive
+                                                    </span>
+                                                @endunless
+                                            </h4>
+                                        </div>
+                                        @if($group->description)
+                                            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                                {{ $group->description }}
+                                            </p>
+                                        @endif
+                                        <div class="mt-2 flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                                            <span>{{ $group->users->count() }} {{ __('members') }}</span>
+                                            <span>{{ __('Created by') }} {{ $group->creator->name }}</span>
+                                        </div>
+                                        @if($group->users->count() > 0)
+                                            <div class="mt-2 flex flex-wrap gap-1">
+                                                @foreach($group->users->take(5) as $user)
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
+                                                        {{ $user->name }}
+                                                    </span>
+                                                @endforeach
+                                                @if($group->users->count() > 5)
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
+                                                        +{{ $group->users->count() - 5 }} more
+                                                    </span>
+                                                @endif
+                                            </div>
+                                        @endif
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <button onclick="editGroup({{ $group->id }})" class="inline-flex items-center px-2 py-1 border border-gray-300 dark:border-gray-600 text-xs leading-4 font-medium rounded text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                                            <x-phosphor-pencil class="w-3 h-3 mr-1" />
+                                            {{ __('Edit') }}
+                                        </button>
+                                        <button onclick="deleteGroup({{ $group->id }})" class="inline-flex items-center px-2 py-1 border border-red-300 dark:border-red-600 text-xs leading-4 font-medium rounded text-red-700 dark:text-red-300 bg-white dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
+                                            <x-phosphor-trash class="w-3 h-3 mr-1" />
+                                            {{ __('Delete') }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <div class="px-6 py-8 text-center">
+                        <x-phosphor-users-three class="mx-auto h-12 w-12 text-gray-400" />
+                        <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">{{ __('No groups found') }}</h3>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            {{ __('Create groups to organize users for impersonation.') }}
+                        </p>
+                    </div>
+                @endif
+            </div>
         @else
             <!-- Regular User Dashboard -->
             <div class="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-6 text-white">
@@ -340,6 +417,261 @@
                 </a>
             </div>
         </div>
+
+        <!-- Switch User Section for Regular Users -->
+        @if(isset($impersonatableUsers) && $impersonatableUsers->count() > 0)
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+                        {{ __('Switch User') }} ({{ $impersonatableUsers->count() }})
+                    </h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        {{ __('Switch to another user account within your group') }}
+                    </p>
+                </div>
+
+                <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                    @foreach($impersonatableUsers as $user)
+                        <div class="px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                            <div class="flex items-center space-x-4">
+                                <!-- User Avatar -->
+                                <div class="flex-shrink-0">
+                                    <div class="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
+                                        <span class="text-xs font-medium text-white">
+                                            {{ $user->initials() }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- User Info -->
+                                <div>
+                                    <h4 class="text-sm font-medium text-gray-900 dark:text-white">
+                                        {{ $user->name }}
+                                    </h4>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                                        {{ $user->email }}
+                                    </p>
+                                    <div class="flex items-center space-x-2 mt-1">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ $user->hasValidApiCredentials() ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' : 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' }}">
+                                            {{ $user->hasValidApiCredentials() ? 'API Connected' : 'No API' }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Switch Button -->
+                            <div>
+                                @if($user->hasValidApiCredentials())
+                                    <form method="POST" action="{{ route('impersonate', $user) }}" class="inline">
+                                        @csrf
+                                        <button type="submit"
+                                                class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                                                onclick="return confirm('Are you sure you want to switch to {{ $user->name }}?')">
+                                            <x-phosphor-user-switch class="w-3 h-3 mr-1" />
+                                            {{ __('Switch') }}
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="text-xs text-gray-400 dark:text-gray-500">
+                                        {{ __('No API credentials') }}
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
         @endif
     </div>
+
+    @if(auth()->user()->isAdmin())
+        <!-- Create Group Modal -->
+        <div id="createGroupModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+            <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+                <div class="mt-3">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Create New Group</h3>
+                    <form id="createGroupForm" method="POST" action="{{ route('admin.groups.store') }}">
+                        @csrf
+                        <div class="mb-4">
+                            <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Group Name</label>
+                            <input type="text" name="name" id="name" required
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
+                        </div>
+                        <div class="mb-4">
+                            <label for="description" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description (Optional)</label>
+                            <textarea name="description" id="description" rows="3"
+                                      class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"></textarea>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Users</label>
+                            <div class="mt-2 max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2">
+                                @foreach($users as $user)
+                                    <label class="flex items-center space-x-2 text-sm">
+                                        <input type="checkbox" name="user_ids[]" value="{{ $user->id }}"
+                                               class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+                                        <span class="text-gray-900 dark:text-white">{{ $user->name }} ({{ $user->email }})</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </div>
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" onclick="hideCreateGroupModal()"
+                                    class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                                Cancel
+                            </button>
+                            <button type="submit"
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                Create Group
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Group Modal -->
+        <div id="editGroupModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+            <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+                <div class="mt-3">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Edit Group</h3>
+                    <form id="editGroupForm" method="POST">
+                        @csrf
+                        @method('PUT')
+                        <div class="mb-4">
+                            <label for="edit_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Group Name</label>
+                            <input type="text" name="name" id="edit_name" required
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
+                        </div>
+                        <div class="mb-4">
+                            <label for="edit_description" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description (Optional)</label>
+                            <textarea name="description" id="edit_description" rows="3"
+                                      class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"></textarea>
+                        </div>
+                        <div class="mb-4">
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" name="is_active" id="edit_is_active" value="1"
+                                       class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Active</span>
+                            </label>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Users</label>
+                            <div id="editUsersContainer" class="mt-2 max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2">
+                                <!-- Users will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" onclick="hideEditGroupModal()"
+                                    class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                                Cancel
+                            </button>
+                            <button type="submit"
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                Update Group
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function showCreateGroupModal() {
+                document.getElementById('createGroupModal').classList.remove('hidden');
+            }
+
+            function hideCreateGroupModal() {
+                document.getElementById('createGroupModal').classList.add('hidden');
+                document.getElementById('createGroupForm').reset();
+            }
+
+            function showEditGroupModal() {
+                document.getElementById('editGroupModal').classList.remove('hidden');
+            }
+
+            function hideEditGroupModal() {
+                document.getElementById('editGroupModal').classList.add('hidden');
+                document.getElementById('editGroupForm').reset();
+            }
+
+            function editGroup(groupId) {
+                fetch(`/admin/groups/${groupId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const group = data.group;
+                        const availableUsers = data.availableUsers;
+
+                        // Update form action
+                        document.getElementById('editGroupForm').action = `/admin/groups/${groupId}`;
+
+                        // Populate form fields
+                        document.getElementById('edit_name').value = group.name;
+                        document.getElementById('edit_description').value = group.description || '';
+                        document.getElementById('edit_is_active').checked = group.is_active;
+
+                        // Populate users
+                        const container = document.getElementById('editUsersContainer');
+                        container.innerHTML = '';
+
+                        // Add current users
+                        group.users.forEach(user => {
+                            const label = document.createElement('label');
+                            label.className = 'flex items-center space-x-2 text-sm';
+                            label.innerHTML = `
+                                <input type="checkbox" name="user_ids[]" value="${user.id}" checked
+                                       class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+                                <span class="text-gray-900 dark:text-white">${user.name} (${user.email})</span>
+                            `;
+                            container.appendChild(label);
+                        });
+
+                        // Add available users
+                        availableUsers.forEach(user => {
+                            const label = document.createElement('label');
+                            label.className = 'flex items-center space-x-2 text-sm';
+                            label.innerHTML = `
+                                <input type="checkbox" name="user_ids[]" value="${user.id}"
+                                       class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+                                <span class="text-gray-900 dark:text-white">${user.name} (${user.email})</span>
+                            `;
+                            container.appendChild(label);
+                        });
+
+                        showEditGroupModal();
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Failed to load group data');
+                    });
+            }
+
+            function deleteGroup(groupId) {
+                if (confirm('Are you sure you want to delete this group? This action cannot be undone.')) {
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = `/admin/groups/${groupId}`;
+                    form.innerHTML = `
+                        @csrf
+                        @method('DELETE')
+                    `;
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            }
+
+            // Close modals when clicking outside
+            document.addEventListener('click', function(event) {
+                const createModal = document.getElementById('createGroupModal');
+                const editModal = document.getElementById('editGroupModal');
+
+                if (event.target === createModal) {
+                    hideCreateGroupModal();
+                }
+                if (event.target === editModal) {
+                    hideEditGroupModal();
+                }
+            });
+        </script>
+    @endif
 </x-layouts.app>

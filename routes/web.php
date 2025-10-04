@@ -4,6 +4,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeclarationController;
 use App\Http\Controllers\DriverController;
 use App\Http\Controllers\TruckController;
+use App\Http\Controllers\UserGroupController;
 use App\Http\Controllers\Settings;
 use Illuminate\Support\Facades\Route;
 
@@ -19,10 +20,10 @@ Route::get('contact-admin', function () {
     return view('contact-admin');
 })->middleware(['auth'])->name('contact-admin');
 
-// Impersonation Routes (Admin only)
-Route::middleware(['auth', 'admin'])->group(function () {
+// Impersonation Routes (Auth users with group permissions)
+Route::middleware(['auth'])->group(function () {
     Route::post('impersonate/{user}', function (\App\Models\User $user) {
-        if (!auth()->user()->canImpersonate() || !$user->canBeImpersonated()) {
+        if (!auth()->user()->canImpersonateUser($user)) {
             abort(403, 'Cannot impersonate this user.');
         }
 
@@ -86,10 +87,16 @@ Route::middleware(['auth'])->prefix('bulk-update')->name('declarations.bulk-upda
 
 Route::middleware(['auth'])->group(function () {
     // Admin Routes - Only accessible by admins
-    Route::prefix('admin')->name('admin.')->group(function () {
+    Route::prefix('admin')->name('admin.')->middleware('admin')->group(function () {
         Route::resource('users', \App\Http\Controllers\Admin\UserController::class);
         Route::post('users/{user}/toggle-status', [\App\Http\Controllers\Admin\UserController::class, 'toggleStatus'])
             ->name('users.toggle-status');
+
+        // Group Management Routes
+        Route::post('groups', [UserGroupController::class, 'store'])->name('groups.store');
+        Route::get('groups/{group}', [UserGroupController::class, 'show'])->name('groups.show');
+        Route::put('groups/{group}', [UserGroupController::class, 'update'])->name('groups.update');
+        Route::delete('groups/{group}', [UserGroupController::class, 'destroy'])->name('groups.destroy');
     });
 
     // Settings Routes
