@@ -106,7 +106,7 @@ class DeclarationService
         $endpoint = "/declarations/{$declarationId}/print";
 
         $data = [
-            'language' => $language
+            'declarationLanguage' => $language
         ];
 
         return $this->apiService->post($endpoint, $data);
