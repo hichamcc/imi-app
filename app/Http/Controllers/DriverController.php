@@ -234,4 +234,105 @@ class DriverController extends Controller
             return [];
         }
     }
+
+    /**
+     * Get declarations for a specific driver (API endpoint for modal)
+     */
+    public function getDeclarations(string $driverId)
+    {
+        try {
+            $driver = $this->driverService->getDriver($driverId);
+            $declarations = $this->getDriverDeclarations($driver);
+
+            return response()->json([
+                'success' => true,
+                'declarations' => $declarations,
+                'count' => count($declarations)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load driver declarations: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Send selected declarations to driver email
+     */
+    public function sendDeclarations(Request $request)
+    {
+        $request->validate([
+            'driver_id' => 'required|string',
+            'driver_email' => 'required|email',
+            'declaration_ids' => 'required|array|min:1',
+            'declaration_ids.*' => 'string',
+            'language' => 'required|string|in:bg,cs,da,de,et,el,en,es,fr,fi,ga,hr,hu,it,lv,lt,mt,nl,no,pl,pt,ro,sk,sl,sv'
+        ]);
+
+        try {
+            $driverId = $request->driver_id;
+            $driverEmail = $request->driver_email;
+            $declarationIds = $request->declaration_ids;
+            $language = $request->language;
+
+            $sentCount = 0;
+            $errors = [];
+
+            foreach ($declarationIds as $declarationId) {
+                try {
+                    $result = $this->declarationService->emailDeclaration($declarationId, $driverEmail, $language);
+
+                    if ($result) {
+                        $sentCount++;
+                        \Log::info('Declaration email sent via bulk action', [
+                            'declaration_id' => $declarationId,
+                            'driver_id' => $driverId,
+                            'driver_email' => $driverEmail,
+                            'language' => $language,
+                            'sent_at' => now()->toDateTimeString()
+                        ]);
+                    } else {
+                        $errors[] = "Failed to send declaration {$declarationId}";
+                    }
+                } catch (\Exception $e) {
+                    $errors[] = "Error sending declaration {$declarationId}: " . $e->getMessage();
+                    \Log::error('Bulk declaration email error', [
+                        'declaration_id' => $declarationId,
+                        'driver_id' => $driverId,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            $success = $sentCount > 0;
+            $message = $sentCount > 0
+                ? "Successfully sent {$sentCount} declaration(s) to {$driverEmail}"
+                : 'No declarations were sent';
+
+            if (!empty($errors)) {
+                $message .= '. Errors: ' . implode(', ', $errors);
+            }
+
+            return response()->json([
+                'success' => $success,
+                'message' => $message,
+                'sent_count' => $sentCount,
+                'error_count' => count($errors),
+                'errors' => $errors
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Bulk declaration email failed', [
+                'driver_id' => $request->driver_id ?? 'unknown',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send declarations: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

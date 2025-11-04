@@ -183,6 +183,12 @@
                                                class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">
                                                 {{ __('Edit') }}
                                             </a>
+                                            @if(isset($driver['email']) && $driver['email'])
+                                                <button onclick="openEmailModal('{{ $driver['driverId'] }}', '{{ $driver['email'] }}', '{{ addslashes($driver['driverFullName'] ?? (($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''))) }}')"
+                                                        class="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300">
+                                                    {{ __('Email') }}
+                                                </button>
+                                            @endif
                                             <form method="POST" action="{{ route('drivers.destroy', $driver['driverId']) }}"
                                                   class="inline-block"
                                                   onsubmit="return confirm('{{ __('Are you sure you want to delete this driver?') }}')">
@@ -273,6 +279,98 @@
                     </div>
                 </div>
             @endif
+        </div>
+    </div>
+
+    <!-- Email Modal -->
+    <div id="emailModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-[800px] shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+                        {{ __('Send Declarations to Driver') }}
+                    </h3>
+                    <button onclick="closeEmailModal()" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="mb-4">
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                        <strong>{{ __('Driver') }}:</strong> <span id="modalDriverName"></span>
+                    </p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                        <strong>{{ __('Email') }}:</strong> <span id="modalDriverEmail"></span>
+                    </p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {{ __('Language') }}
+                    </label>
+                    <select id="emailLanguage" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                        <option value="en">English</option>
+                        <option value="bg">Bulgarian</option>
+                        <option value="cs">Czech</option>
+                        <option value="da">Danish</option>
+                        <option value="de">German</option>
+                        <option value="et">Estonian</option>
+                        <option value="el">Greek</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="fi">Finnish</option>
+                        <option value="ga">Irish</option>
+                        <option value="hr">Croatian</option>
+                        <option value="hu">Hungarian</option>
+                        <option value="it">Italian</option>
+                        <option value="lv">Latvian</option>
+                        <option value="lt">Lithuanian</option>
+                        <option value="mt">Maltese</option>
+                        <option value="nl">Dutch</option>
+                        <option value="no">Norwegian</option>
+                        <option value="pl">Polish</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ro">Romanian</option>
+                        <option value="sk">Slovak</option>
+                        <option value="sl">Slovenian</option>
+                        <option value="sv">Swedish</option>
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {{ __('Select Declarations') }}
+                        </label>
+                        <button onclick="loadDriverDeclarations()" class="text-sm text-blue-600 hover:text-blue-800">
+                            {{ __('Refresh') }}
+                        </button>
+                    </div>
+                    <div id="declarationsLoading" class="text-center py-4 hidden">
+                        <div class="inline-flex items-center">
+                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {{ __('Loading declarations...') }}
+                        </div>
+                    </div>
+                    <div id="declarationsList" class="max-h-64 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-2">
+                        <!-- Declarations will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3">
+                    <button onclick="closeEmailModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
+                        {{ __('Cancel') }}
+                    </button>
+                    <button onclick="sendSelectedDeclarations()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" id="sendButton">
+                        {{ __('Send Emails') }}
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -420,5 +518,164 @@
             metaTag.content = '{{ csrf_token() }}';
             document.head.appendChild(metaTag);
         }
+
+        // Email Modal Functions
+        let currentDriverId = null;
+        let currentDriverEmail = null;
+        let driverDeclarations = [];
+
+        function openEmailModal(driverId, driverEmail, driverName) {
+            currentDriverId = driverId;
+            currentDriverEmail = driverEmail;
+
+            document.getElementById('modalDriverName').textContent = driverName;
+            document.getElementById('modalDriverEmail').textContent = driverEmail;
+            document.getElementById('emailModal').classList.remove('hidden');
+
+            // Load driver declarations
+            loadDriverDeclarations();
+        }
+
+        function closeEmailModal() {
+            document.getElementById('emailModal').classList.add('hidden');
+            currentDriverId = null;
+            currentDriverEmail = null;
+            driverDeclarations = [];
+        }
+
+        function loadDriverDeclarations() {
+            if (!currentDriverId) return;
+
+            const loadingDiv = document.getElementById('declarationsLoading');
+            const listDiv = document.getElementById('declarationsList');
+
+            loadingDiv.classList.remove('hidden');
+            listDiv.innerHTML = '';
+
+            fetch(`{{ route('drivers.declarations', '') }}/${currentDriverId}`, {
+                method: 'GET',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadingDiv.classList.add('hidden');
+
+                if (data.success && data.declarations) {
+                    driverDeclarations = data.declarations;
+                    renderDeclarations(data.declarations);
+                } else {
+                    listDiv.innerHTML = '<p class="text-gray-500 text-sm">No declarations found for this driver.</p>';
+                }
+            })
+            .catch(error => {
+                loadingDiv.classList.add('hidden');
+                console.error('Error loading declarations:', error);
+                listDiv.innerHTML = '<p class="text-red-500 text-sm">Error loading declarations. Please try again.</p>';
+            });
+        }
+
+        function renderDeclarations(declarations) {
+            const listDiv = document.getElementById('declarationsList');
+
+            if (declarations.length === 0) {
+                listDiv.innerHTML = '<p class="text-gray-500 text-sm">No declarations found for this driver.</p>';
+                return;
+            }
+
+            const html = declarations.map(declaration => {
+                const startDate = declaration.declarationStartDate || 'N/A';
+                const endDate = declaration.declarationEndDate || 'N/A';
+                const country = declaration.declarationPostingCountry || 'N/A';
+                const status = declaration.declarationStatus || 'N/A';
+
+                const statusColor = status === 'SUBMITTED' ? 'text-green-600' :
+                                   status === 'DRAFT' ? 'text-yellow-600' :
+                                   status === 'EXPIRED' ? 'text-red-600' : 'text-gray-600';
+
+                return `
+                    <div class="flex items-center p-2 border border-gray-200 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <input type="checkbox"
+                               id="decl_${declaration.declarationId}"
+                               value="${declaration.declarationId}"
+                               class="declaration-checkbox mr-3">
+                        <div class="flex-1">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                        ${country} (${startDate} - ${endDate})
+                                    </p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                                        ID: ${declaration.declarationId}
+                                    </p>
+                                </div>
+                                <span class="text-xs font-medium ${statusColor}">
+                                    ${status}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            listDiv.innerHTML = html;
+        }
+
+        function sendSelectedDeclarations() {
+            const selectedCheckboxes = document.querySelectorAll('.declaration-checkbox:checked');
+            const selectedDeclarationIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+            if (selectedDeclarationIds.length === 0) {
+                alert('Please select at least one declaration to send.');
+                return;
+            }
+
+            const language = document.getElementById('emailLanguage').value;
+            const sendButton = document.getElementById('sendButton');
+
+            // Show loading state
+            sendButton.textContent = 'Sending...';
+            sendButton.disabled = true;
+
+            fetch('{{ route("drivers.send-declarations") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    driver_id: currentDriverId,
+                    driver_email: currentDriverEmail,
+                    declaration_ids: selectedDeclarationIds,
+                    language: language
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(`Successfully sent ${data.sent_count} declaration(s) to ${currentDriverEmail}`, 'success');
+                    closeEmailModal();
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to send declarations'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to send declarations. Please try again.');
+            })
+            .finally(() => {
+                // Reset button state
+                sendButton.textContent = 'Send Emails';
+                sendButton.disabled = false;
+            });
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('emailModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeEmailModal();
+            }
+        });
     </script>
 </x-layouts.app>

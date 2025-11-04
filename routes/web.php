@@ -55,6 +55,8 @@ Route::post('leave-impersonation', function () {
 Route::middleware(['auth', 'api.credentials'])->group(function () {
     // Driver Management Routes
     Route::resource('drivers', DriverController::class);
+    Route::get('drivers/{driver}/declarations', [DriverController::class, 'getDeclarations'])->name('drivers.declarations');
+    Route::post('drivers/send-declarations', [DriverController::class, 'sendDeclarations'])->name('drivers.send-declarations');
 
     // Declaration Management Routes
     Route::resource('declarations', DeclarationController::class);
