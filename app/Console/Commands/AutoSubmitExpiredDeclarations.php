@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Services\PostingApiService;
+use App\Services\DeclarationService;
+use App\Models\DriverProfile;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -13,11 +15,13 @@ class AutoSubmitExpiredDeclarations extends Command
     protected $description = 'Automatically create and submit new declarations for drivers with expired declarations (end date was yesterday)';
 
     protected PostingApiService $apiService;
+    protected DeclarationService $declarationService;
 
-    public function __construct(PostingApiService $apiService)
+    public function __construct(PostingApiService $apiService, DeclarationService $declarationService)
     {
         parent::__construct();
         $this->apiService = $apiService;
+        $this->declarationService = $declarationService;
     }
 
     public function handle()
@@ -39,6 +43,7 @@ class AutoSubmitExpiredDeclarations extends Command
         $expiredCount = 0;
         $createdCount = 0;
         $submittedCount = 0;
+        $emailsSentCount = 0;
         $errorCount = 0;
 
         try {
@@ -137,7 +142,8 @@ class AutoSubmitExpiredDeclarations extends Command
                                             $submittedCount++;
                                             $this->info("    ✓ Successfully submitted new declaration {$newDeclarationId}");
 
-                                       
+                                            // Check if driver has email and send declaration
+                                            $this->sendDeclarationEmailIfDriverHasEmail($newDeclarationId, $fullDeclaration, $emailsSentCount);
                                         } else {
                                             $this->error("    ✗ Failed to submit new declaration {$newDeclarationId}");
                                             $errorCount++;
@@ -176,6 +182,7 @@ class AutoSubmitExpiredDeclarations extends Command
         $this->line("  - Expired declarations found: {$expiredCount}");
         $this->line("  - New declarations created: {$createdCount}");
         $this->line("  - New declarations submitted: {$submittedCount}");
+        $this->line("  - Emails sent to drivers: {$emailsSentCount}");
         $this->line("  - Errors: {$errorCount}");
         $this->line("  - Execution time: {$executionTime} seconds");
 
@@ -184,6 +191,7 @@ class AutoSubmitExpiredDeclarations extends Command
             'expired_count' => $expiredCount,
             'created_count' => $createdCount,
             'submitted_count' => $submittedCount,
+            'emails_sent_count' => $emailsSentCount,
             'error_count' => $errorCount,
             'execution_time_seconds' => $executionTime,
             'peak_memory_usage_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2),
@@ -264,5 +272,68 @@ class AutoSubmitExpiredDeclarations extends Command
         }
 
         return $newData;
+    }
+
+    /**
+     * Check if driver has email and send declaration in English
+     */
+    private function sendDeclarationEmailIfDriverHasEmail(string $declarationId, array $declaration, int &$emailsSentCount): void
+    {
+        try {
+            $driverId = $declaration['driverId'] ?? null;
+
+            if (!$driverId) {
+                $this->line("    ℹ No driver ID found for declaration {$declarationId}");
+                return;
+            }
+
+            // Get driver email from driver profiles
+            $driverEmail = DriverProfile::getDriverEmail($driverId);
+
+            if (!$driverEmail) {
+                $this->line("    ℹ No email found for driver {$driverId}");
+                return;
+            }
+
+            $this->line("    📧 Sending declaration email to driver {$driverId} at {$driverEmail}");
+
+            // Set declaration service to use current API credentials
+            $this->declarationService->setApiService($this->apiService);
+
+            // Send email in English
+            $emailResult = $this->declarationService->emailDeclaration($declarationId, $driverEmail, 'en');
+
+            if ($emailResult) {
+                $emailsSentCount++;
+                $this->info("    ✓ Successfully sent declaration email to {$driverEmail}");
+
+                Log::info('AUTO-SUBMIT: Declaration email sent', [
+                    'declaration_id' => $declarationId,
+                    'driver_id' => $driverId,
+                    'driver_email' => $driverEmail,
+                    'language' => 'en',
+                    'sent_at' => now()->toDateTimeString()
+                ]);
+            } else {
+                $this->error("    ✗ Failed to send declaration email to {$driverEmail}");
+
+                Log::warning('AUTO-SUBMIT: Failed to send declaration email', [
+                    'declaration_id' => $declarationId,
+                    'driver_id' => $driverId,
+                    'driver_email' => $driverEmail,
+                    'error' => 'Email API returned false/null'
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            $this->error("    ✗ Failed to send declaration email: " . $e->getMessage());
+
+            Log::error('AUTO-SUBMIT: Email sending error', [
+                'declaration_id' => $declarationId,
+                'driver_id' => $declaration['driverId'] ?? 'unknown',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
     }
 }

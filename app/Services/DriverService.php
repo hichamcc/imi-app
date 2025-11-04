@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\DriverProfile;
+
 class DriverService
 {
     protected PostingApiService $apiService;
@@ -247,5 +249,84 @@ class DriverService
         }
 
         return $drivers;
+    }
+
+    /**
+     * Enrich a single driver with profile data
+     */
+    public function enrichDriverWithProfile(array $driver): array
+    {
+        $driverId = $driver['driverId'] ?? null;
+
+        if (!$driverId) {
+            return $driver;
+        }
+
+        $email = DriverProfile::getDriverEmail($driverId);
+        $driver['email'] = $email;
+        $driver['has_email'] = !empty($email);
+
+        return $driver;
+    }
+
+    /**
+     * Enrich multiple drivers with profile data
+     */
+    public function enrichDriversWithProfiles(array $drivers): array
+    {
+        // Get all driver IDs
+        $driverIds = array_filter(array_map(function($driver) {
+            return $driver['driverId'] ?? null;
+        }, $drivers));
+
+        if (empty($driverIds)) {
+            return $drivers;
+        }
+
+        // Bulk load profiles
+        $profiles = DriverProfile::whereIn('driver_id', $driverIds)
+            ->get()
+            ->keyBy('driver_id');
+
+        // Enrich each driver
+        foreach ($drivers as &$driver) {
+            $driverId = $driver['driverId'] ?? null;
+
+            if ($driverId && $profiles->has($driverId)) {
+                $profile = $profiles->get($driverId);
+                $driver['email'] = $profile->email;
+                $driver['has_email'] = !empty($profile->email);
+            } else {
+                $driver['email'] = null;
+                $driver['has_email'] = false;
+            }
+        }
+
+        return $drivers;
+    }
+
+    /**
+     * Get driver with profile data
+     */
+    public function getDriverWithProfile(string $driverId): array
+    {
+        $driver = $this->getDriver($driverId);
+        return $this->enrichDriverWithProfile($driver);
+    }
+
+    /**
+     * Get drivers with profile data and pagination
+     */
+    public function getDriversPaginatedWithProfiles(int $limit = 50, string $startKey = null, array $filters = []): array
+    {
+        $result = $this->getDriversPaginated($limit, $startKey, $filters);
+
+        if (isset($result['items']) && is_array($result['items'])) {
+            $result['items'] = $this->enrichDriversWithProfiles($result['items']);
+        } elseif (is_array($result)) {
+            $result = $this->enrichDriversWithProfiles($result);
+        }
+
+        return $result;
     }
 }

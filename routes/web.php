@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeclarationController;
 use App\Http\Controllers\DriverController;
+use App\Http\Controllers\DriverProfileController;
 use App\Http\Controllers\TruckController;
 use App\Http\Controllers\UserGroupController;
 use App\Http\Controllers\Settings;
@@ -72,6 +73,11 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::post('trucks-import', [TruckController::class, 'processImport'])->name('trucks.process-import');
     Route::post('trucks/{truck}/assign-driver', [TruckController::class, 'assignDriver'])->name('trucks.assign-driver');
     Route::delete('truck-assignments/{assignment}', [TruckController::class, 'unassignDriver'])->name('trucks.unassign-driver');
+
+    // Driver Profile Routes
+    Route::post('driver-profiles/update-email', [DriverProfileController::class, 'updateEmail'])->name('driver-profiles.update-email');
+    Route::post('driver-profiles/bulk-update-emails', [DriverProfileController::class, 'bulkUpdateEmails'])->name('driver-profiles.bulk-update-emails');
+    Route::get('driver-profiles/{driverId}', [DriverProfileController::class, 'show'])->name('driver-profiles.show');
 });
 
 // Bulk Declaration Update Routes - Using different path to avoid API interception

@@ -44,9 +44,7 @@ class DriverController extends Controller
         }
 
         try {
-            $drivers = $this->driverService->getDriversPaginated($limit, $startKey, $filters);
-
-      
+            $drivers = $this->driverService->getDriversPaginatedWithProfiles($limit, $startKey, $filters);
 
             // Add active declaration countries to drivers
             if (isset($drivers['items'])) {
@@ -104,7 +102,7 @@ class DriverController extends Controller
     public function show(string $id)
     {
         try {
-            $driver = $this->driverService->getDriver($id);
+            $driver = $this->driverService->getDriverWithProfile($id);
 
             // Get driver's declarations by matching driver name
             $declarations = $this->getDriverDeclarations($driver);

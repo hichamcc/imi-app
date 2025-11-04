@@ -66,6 +66,9 @@
                                     {{ __('Date of Birth') }}
                                 </th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    {{ __('Email') }}
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     {{ __('Declarations') }}
                                 </th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -104,6 +107,39 @@
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm text-gray-900 dark:text-white">
                                             {{ $driver['driverDateOfBirth'] ?? 'N/A' }}
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="email-cell" data-driver-id="{{ $driver['driverId'] }}">
+                                            @if(isset($driver['email']) && $driver['email'])
+                                                <div class="email-display flex items-center space-x-2">
+                                                    <span class="text-sm text-gray-900 dark:text-white">{{ $driver['email'] }}</span>
+                                                    <button onclick="editEmail('{{ $driver['driverId'] }}', '{{ $driver['email'] }}')"
+                                                            class="text-blue-600 hover:text-blue-900 dark:text-blue-400 text-xs">
+                                                        Edit
+                                                    </button>
+                                                </div>
+                                            @else
+                                                <button onclick="editEmail('{{ $driver['driverId'] }}', '')"
+                                                        class="text-blue-600 hover:text-blue-900 dark:text-blue-400 text-sm">
+                                                    + Add Email
+                                                </button>
+                                            @endif
+                                            <div class="email-edit hidden">
+                                                <div class="flex items-center space-x-2">
+                                                    <input type="email"
+                                                           class="email-input w-40 px-2 py-1 text-sm border border-gray-300 rounded"
+                                                           placeholder="driver@example.com">
+                                                    <button onclick="saveEmail('{{ $driver['driverId'] }}')"
+                                                            class="text-green-600 hover:text-green-900 text-xs">
+                                                        Save
+                                                    </button>
+                                                    <button onclick="cancelEdit('{{ $driver['driverId'] }}')"
+                                                            class="text-gray-600 hover:text-gray-900 text-xs">
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
@@ -239,4 +275,150 @@
             @endif
         </div>
     </div>
+
+    <script>
+        // Email editing functions
+        function editEmail(driverId, currentEmail) {
+            const emailCell = document.querySelector(`[data-driver-id="${driverId}"]`);
+            const displayDiv = emailCell.querySelector('.email-display');
+            const editDiv = emailCell.querySelector('.email-edit');
+            const addButton = emailCell.querySelector('button');
+
+            // Hide display elements
+            if (displayDiv) displayDiv.style.display = 'none';
+            if (addButton && !displayDiv) addButton.style.display = 'none';
+
+            // Show edit form
+            editDiv.classList.remove('hidden');
+
+            // Set current email value
+            const emailInput = editDiv.querySelector('.email-input');
+            emailInput.value = currentEmail || '';
+            emailInput.focus();
+        }
+
+        function saveEmail(driverId) {
+            const emailCell = document.querySelector(`[data-driver-id="${driverId}"]`);
+            const emailInput = emailCell.querySelector('.email-input');
+            const email = emailInput.value.trim();
+
+            // Basic email validation
+            if (email && !isValidEmail(email)) {
+                alert('Please enter a valid email address');
+                return;
+            }
+
+            // Show loading state
+            const saveButton = emailCell.querySelector('button[onclick*="saveEmail"]');
+            const originalText = saveButton.textContent;
+            saveButton.textContent = 'Saving...';
+            saveButton.disabled = true;
+
+            // Make API call
+            fetch('{{ route("driver-profiles.update-email") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    driver_id: driverId,
+                    email: email
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update the display
+                    updateEmailDisplay(driverId, email);
+                    cancelEdit(driverId);
+
+                    // Show success message (optional)
+                    showMessage('Email updated successfully', 'success');
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to update email'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to update email. Please try again.');
+            })
+            .finally(() => {
+                // Reset button state
+                saveButton.textContent = originalText;
+                saveButton.disabled = false;
+            });
+        }
+
+        function cancelEdit(driverId) {
+            const emailCell = document.querySelector(`[data-driver-id="${driverId}"]`);
+            const displayDiv = emailCell.querySelector('.email-display');
+            const editDiv = emailCell.querySelector('.email-edit');
+            const addButton = emailCell.querySelector('button[onclick*="editEmail"]:not([onclick*="saveEmail"])');
+
+            // Hide edit form
+            editDiv.classList.add('hidden');
+
+            // Show appropriate display
+            if (displayDiv) {
+                displayDiv.style.display = 'flex';
+            } else if (addButton) {
+                addButton.style.display = 'inline-block';
+            }
+        }
+
+        function updateEmailDisplay(driverId, email) {
+            const emailCell = document.querySelector(`[data-driver-id="${driverId}"]`);
+
+            if (email) {
+                // Create or update email display
+                let displayDiv = emailCell.querySelector('.email-display');
+                if (!displayDiv) {
+                    // Create new display div
+                    displayDiv = document.createElement('div');
+                    displayDiv.className = 'email-display flex items-center space-x-2';
+                    emailCell.insertBefore(displayDiv, emailCell.querySelector('.email-edit'));
+
+                    // Hide add button if it exists
+                    const addButton = emailCell.querySelector('button[onclick*="editEmail"]:not([onclick*="saveEmail"])');
+                    if (addButton) addButton.style.display = 'none';
+                }
+
+                displayDiv.innerHTML = `
+                    <span class="text-sm text-gray-900 dark:text-white">${email}</span>
+                    <button onclick="editEmail('${driverId}', '${email}')" class="text-blue-600 hover:text-blue-900 dark:text-blue-400 text-xs">
+                        Edit
+                    </button>
+                `;
+            }
+        }
+
+        function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+
+        function showMessage(message, type = 'info') {
+            // Simple message display - you can enhance this
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-white z-50 ${
+                type === 'success' ? 'bg-green-500' :
+                type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+            }`;
+            messageDiv.textContent = message;
+            document.body.appendChild(messageDiv);
+
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 3000);
+        }
+
+        // Add CSRF token to head if not already present
+        if (!document.querySelector('meta[name="csrf-token"]')) {
+            const metaTag = document.createElement('meta');
+            metaTag.name = 'csrf-token';
+            metaTag.content = '{{ csrf_token() }}';
+            document.head.appendChild(metaTag);
+        }
+    </script>
 </x-layouts.app>

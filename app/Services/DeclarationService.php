@@ -12,6 +12,14 @@ class DeclarationService
     }
 
     /**
+     * Set the API service instance (useful for console commands with different credentials)
+     */
+    public function setApiService(PostingApiService $apiService): void
+    {
+        $this->apiService = $apiService;
+    }
+
+    /**
      * Get all declarations with optional filtering
      */
     public function getDeclarations(array $filters = []): array
