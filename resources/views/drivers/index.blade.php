@@ -552,7 +552,7 @@
             loadingDiv.classList.remove('hidden');
             listDiv.innerHTML = '';
 
-            fetch(`{{ route('drivers.declarations', '') }}/${currentDriverId}`, {
+            fetch(`/drivers/${currentDriverId}/declarations`, {
                 method: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
