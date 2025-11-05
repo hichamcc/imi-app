@@ -36,39 +36,31 @@ class DashboardController extends Controller
         }
 
         try {
-            // Fetch drivers to calculate statistics
-            $drivers = $this->driverService->getDriversPaginated(50);
+            // Fetch ALL drivers using pagination to get accurate counts
+            $allDrivers = $this->getAllDrivers();
+            $totalDrivers = count($allDrivers);
 
-            // Use the total count from API response, fall back to items count
-            $totalDrivers = $drivers['count'] ?? count($drivers['items'] ?? []);
-            $activeDeclarations = 0;
-            $driversWithDeclarations = 0;
+            // Fetch ALL declarations to get accurate counts
+            $allDeclarations = $this->getAllDeclarations();
 
-            // Calculate statistics from drivers data
-            if (isset($drivers['items']) && is_array($drivers['items'])) {
-                foreach ($drivers['items'] as $driver) {
-                    if ($driver['driverHasDeclarations'] ?? false) {
-                        $driversWithDeclarations++;
-                        $activeDeclarations += $driver['driverCountActiveDeclarations'] ?? 0;
-                    }
-                }
-            }
+            // Calculate driver statistics by matching with declarations
+            $driverStats = $this->calculateDriverStatistics($allDrivers, $allDeclarations);
 
-            // Fetch declaration statistics
-            $declarationStats = $this->getDeclarationStatistics();
+            // Calculate declaration statistics
+            $declarationStats = $this->calculateDeclarationStatistics($allDeclarations);
 
             // Fetch truck statistics
             $truckStats = $this->truckService->getFleetStatistics();
 
             $stats = [
                 'totalDrivers' => $totalDrivers,
-                'activeDeclarations' => $activeDeclarations,
-                'driversWithDeclarations' => $driversWithDeclarations,
-                'pendingSubmissions' => $declarationStats['draft'] ?? 0,
-                'totalDeclarations' => $declarationStats['total'] ?? 0,
-                'submittedDeclarations' => $declarationStats['submitted'] ?? 0,
-                'withdrawnDeclarations' => $declarationStats['withdrawn'] ?? 0,
-                'expiredDeclarations' => $declarationStats['expired'] ?? 0,
+                'activeDeclarations' => $driverStats['activeDeclarations'],
+                'driversWithDeclarations' => $driverStats['driversWithDeclarations'],
+                'pendingSubmissions' => $declarationStats['draft'],
+                'totalDeclarations' => $declarationStats['total'],
+                'submittedDeclarations' => $declarationStats['submitted'],
+                'withdrawnDeclarations' => $declarationStats['withdrawn'],
+                'expiredDeclarations' => $declarationStats['expired'],
                 'totalTrucks' => $truckStats['total'] ?? 0,
                 'availableTrucks' => $truckStats['available'] ?? 0,
                 'trucksInTransit' => $truckStats['in_transit'] ?? 0,
@@ -108,34 +100,105 @@ class DashboardController extends Controller
     }
 
     /**
-     * Get declaration statistics by status
+     * Get ALL drivers using pagination
      */
-    private function getDeclarationStatistics()
+    private function getAllDrivers()
+    {
+        $allDrivers = [];
+        $startKey = null;
+
+        do {
+            $drivers = $this->driverService->getDriversPaginated(250, $startKey);
+            $currentDrivers = $drivers['items'] ?? [];
+
+            $allDrivers = array_merge($allDrivers, $currentDrivers);
+            $startKey = $drivers['lastEvaluatedKey'] ?? null;
+
+        } while ($startKey);
+
+        return $allDrivers;
+    }
+
+    /**
+     * Get ALL declarations using pagination
+     */
+    private function getAllDeclarations()
+    {
+        $allDeclarations = [];
+        $startKey = null;
+
+        do {
+            $declarations = $this->declarationService->getDeclarationsPaginated(250, $startKey);
+            $currentDeclarations = $declarations['items'] ?? [];
+
+            $allDeclarations = array_merge($allDeclarations, $currentDeclarations);
+            $startKey = $declarations['lastEvaluatedKey'] ?? null;
+
+        } while ($startKey);
+
+        return $allDeclarations;
+    }
+
+    /**
+     * Calculate driver statistics by matching with declarations
+     */
+    private function calculateDriverStatistics($drivers, $declarations)
+    {
+        $driversWithDeclarations = 0;
+        $activeDeclarations = 0;
+
+        // Group declarations by driver name and date of birth
+        $declarationsByDriver = [];
+        foreach ($declarations as $declaration) {
+            $driverName = $declaration['driverLatinFullName'] ?? null;
+            $driverDob = $declaration['driverDateOfBirth'] ?? null;
+            $status = $declaration['declarationStatus'] ?? null;
+
+            if ($driverName && $status === 'SUBMITTED') {
+                $key = $driverName . '|' . $driverDob;
+                if (!isset($declarationsByDriver[$key])) {
+                    $declarationsByDriver[$key] = 0;
+                }
+                $declarationsByDriver[$key]++;
+            }
+        }
+
+        // Match drivers with their declarations
+        foreach ($drivers as $driver) {
+            $driverName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
+            $driverDob = $driver['driverDateOfBirth'] ?? null;
+            $key = $driverName . '|' . $driverDob;
+
+            if (isset($declarationsByDriver[$key]) && $declarationsByDriver[$key] > 0) {
+                $driversWithDeclarations++;
+                $activeDeclarations += $declarationsByDriver[$key];
+            }
+        }
+
+        return [
+            'driversWithDeclarations' => $driversWithDeclarations,
+            'activeDeclarations' => $activeDeclarations
+        ];
+    }
+
+    /**
+     * Calculate declaration statistics by status
+     */
+    private function calculateDeclarationStatistics($declarations)
     {
         $stats = [
-            'total' => 0,
+            'total' => count($declarations),
             'draft' => 0,
             'submitted' => 0,
             'withdrawn' => 0,
             'expired' => 0,
         ];
 
-        try {
-            // Fetch declarations to count by status
-            $declarations = $this->declarationService->getDeclarationsPaginated(100);
-
-            if (isset($declarations['items']) && is_array($declarations['items'])) {
-                $stats['total'] = count($declarations['items']);
-
-                foreach ($declarations['items'] as $declaration) {
-                    $status = strtolower($declaration['declarationStatus'] ?? '');
-                    if (isset($stats[$status])) {
-                        $stats[$status]++;
-                    }
-                }
+        foreach ($declarations as $declaration) {
+            $status = strtolower($declaration['declarationStatus'] ?? '');
+            if (isset($stats[$status])) {
+                $stats[$status]++;
             }
-        } catch (\Exception $e) {
-            // If API fails, return zeros
         }
 
         return $stats;
