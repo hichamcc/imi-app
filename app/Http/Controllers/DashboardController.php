@@ -76,6 +76,12 @@ class DashboardController extends Controller
             // Log the exception
             \Log::error('Dashboard exception for user ' . auth()->user()->name . ': ' . $e->getMessage());
 
+            // Check if it's a permissions issue
+            $errorMessage = 'Failed to load statistics: ' . $e->getMessage();
+            if (strpos($e->getMessage(), 'forbidden') !== false || strpos($e->getMessage(), 'Insufficient permissions') !== false) {
+                $errorMessage = 'API access forbidden. Please contact your administrator to ensure you have the required permissions for drivers and declarations.';
+            }
+
             // Fallback to placeholder values if API fails
             $stats = [
                 'totalDrivers' => '--',
@@ -95,7 +101,7 @@ class DashboardController extends Controller
                 'fleetUtilization' => '--',
             ];
 
-            return view('dashboard', compact('stats', 'impersonatableUsers'))->with('error', 'Failed to load statistics: ' . $e->getMessage());
+            return view('dashboard', compact('stats', 'impersonatableUsers'))->with('error', $errorMessage);
         }
     }
 
@@ -141,39 +147,78 @@ class DashboardController extends Controller
 
     /**
      * Calculate driver statistics by matching with declarations
+     * Uses the same logic as DriverService::getDriversWithActiveCountries
      */
     private function calculateDriverStatistics($drivers, $declarations)
     {
         $driversWithDeclarations = 0;
         $activeDeclarations = 0;
+        $driverDeclarationCounts = [];
 
-        // Group declarations by driver name and date of birth
-        $declarationsByDriver = [];
+        // Log some debug info
+        \Log::info('Dashboard: Calculating driver statistics', [
+            'total_drivers' => count($drivers),
+            'total_declarations' => count($declarations)
+        ]);
+
+        // Use the same matching logic as DriverService
         foreach ($declarations as $declaration) {
-            $driverName = $declaration['driverLatinFullName'] ?? null;
-            $driverDob = $declaration['driverDateOfBirth'] ?? null;
+            $driverFullName = $declaration['driverLatinFullName'] ?? null;
             $status = $declaration['declarationStatus'] ?? null;
+            $declarationDateOfBirth = $declaration['driverDateOfBirth'] ?? null;
 
-            if ($driverName && $status === 'SUBMITTED') {
-                $key = $driverName . '|' . $driverDob;
-                if (!isset($declarationsByDriver[$key])) {
-                    $declarationsByDriver[$key] = 0;
+            // Only include submitted declarations
+            if ($status === 'SUBMITTED' && $driverFullName) {
+                // Find driver by full name match with additional criteria to handle duplicates
+                $potentialMatches = [];
+
+                foreach ($drivers as $driver) {
+                    $driverName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
+                    if ($driverName === $driverFullName) {
+                        $potentialMatches[] = $driver;
+                    }
                 }
-                $declarationsByDriver[$key]++;
+
+                // If we have multiple drivers with same name, try to match by date of birth
+                $matchedDriver = null;
+                if (count($potentialMatches) === 1) {
+                    $matchedDriver = $potentialMatches[0];
+                } elseif (count($potentialMatches) > 1) {
+                    if ($declarationDateOfBirth) {
+                        // Try to match by date of birth for better accuracy
+                        foreach ($potentialMatches as $driver) {
+                            if (($driver['driverDateOfBirth'] ?? null) === $declarationDateOfBirth) {
+                                $matchedDriver = $driver;
+                                break;
+                            }
+                        }
+                    }
+
+                    // If no date of birth match, assign to first match as fallback
+                    if (!$matchedDriver) {
+                        $matchedDriver = $potentialMatches[0];
+                    }
+                }
+
+                if ($matchedDriver) {
+                    $matchingDriverId = $matchedDriver['driverId'];
+                    if (!isset($driverDeclarationCounts[$matchingDriverId])) {
+                        $driverDeclarationCounts[$matchingDriverId] = 0;
+                    }
+                    $driverDeclarationCounts[$matchingDriverId]++;
+                    $activeDeclarations++;
+                }
             }
         }
 
-        // Match drivers with their declarations
-        foreach ($drivers as $driver) {
-            $driverName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
-            $driverDob = $driver['driverDateOfBirth'] ?? null;
-            $key = $driverName . '|' . $driverDob;
+        // Count unique drivers with declarations
+        $driversWithDeclarations = count($driverDeclarationCounts);
 
-            if (isset($declarationsByDriver[$key]) && $declarationsByDriver[$key] > 0) {
-                $driversWithDeclarations++;
-                $activeDeclarations += $declarationsByDriver[$key];
-            }
-        }
+        \Log::info('Dashboard: Driver statistics calculated', [
+            'drivers_with_declarations' => $driversWithDeclarations,
+            'active_declarations' => $activeDeclarations,
+            'sample_driver_counts' => array_slice($driverDeclarationCounts, 0, 3, true)
+        ]);
 
         return [
             'driversWithDeclarations' => $driversWithDeclarations,
