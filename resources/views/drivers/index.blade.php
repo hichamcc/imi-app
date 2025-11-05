@@ -344,9 +344,17 @@
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                             {{ __('Select Declarations') }}
                         </label>
-                        <button onclick="loadDriverDeclarations()" class="text-sm text-blue-600 hover:text-blue-800">
-                            {{ __('Refresh') }}
-                        </button>
+                        <div class="flex space-x-2">
+                            <button onclick="selectAllSubmitted()" class="text-sm text-green-600 hover:text-green-800">
+                                {{ __('Select All Submitted') }}
+                            </button>
+                            <button onclick="clearAllSelections()" class="text-sm text-gray-600 hover:text-gray-800">
+                                {{ __('Clear All') }}
+                            </button>
+                            <button onclick="loadDriverDeclarations()" class="text-sm text-blue-600 hover:text-blue-800">
+                                {{ __('Refresh') }}
+                            </button>
+                        </div>
                     </div>
                     <div id="declarationsLoading" class="text-center py-4 hidden">
                         <div class="inline-flex items-center">
@@ -599,6 +607,7 @@
                         <input type="checkbox"
                                id="decl_${declaration.declarationId}"
                                value="${declaration.declarationId}"
+                               data-status="${status}"
                                class="declaration-checkbox mr-3">
                         <div class="flex-1">
                             <div class="flex justify-between items-start">
@@ -620,6 +629,32 @@
             }).join('');
 
             listDiv.innerHTML = html;
+        }
+
+        function selectAllSubmitted() {
+            const checkboxes = document.querySelectorAll('.declaration-checkbox');
+            let selectedCount = 0;
+
+            checkboxes.forEach(checkbox => {
+                if (checkbox.dataset.status === 'SUBMITTED') {
+                    checkbox.checked = true;
+                    selectedCount++;
+                }
+            });
+
+            if (selectedCount === 0) {
+                showMessage('No submitted declarations found to select.', 'info');
+            } else {
+                showMessage(`Selected ${selectedCount} submitted declaration(s).`, 'success');
+            }
+        }
+
+        function clearAllSelections() {
+            const checkboxes = document.querySelectorAll('.declaration-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            showMessage('All selections cleared.', 'info');
         }
 
         function sendSelectedDeclarations() {
