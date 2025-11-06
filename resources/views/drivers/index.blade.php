@@ -75,6 +75,9 @@
                                     {{ __('Active Countries') }}
                                 </th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    {{ __('Auto Renew') }}
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     {{ __('Last Updated') }}
                                 </th>
                                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -167,6 +170,20 @@
                                         @else
                                             <span class="text-sm text-gray-500 dark:text-gray-400">{{ __('No active declarations') }}</span>
                                         @endif
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <button onclick="toggleAutoRenew('{{ $driver['driverId'] }}')"
+                                                    class="auto-renew-toggle relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {{ ($driver['auto_renew'] ?? true) ? 'bg-indigo-600' : 'bg-gray-200' }}"
+                                                    data-driver-id="{{ $driver['driverId'] }}"
+                                                    data-auto-renew="{{ ($driver['auto_renew'] ?? true) ? 'true' : 'false' }}">
+                                                <span class="sr-only">{{ __('Toggle auto renew') }}</span>
+                                                <span class="toggle-slider inline-block h-4 w-4 transform rounded-full bg-white transition {{ ($driver['auto_renew'] ?? true) ? 'translate-x-6' : 'translate-x-1' }}"></span>
+                                            </button>
+                                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                                                {{ ($driver['auto_renew'] ?? true) ? __('Enabled') : __('Disabled') }}
+                                            </span>
+                                        </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm text-gray-500 dark:text-gray-400">
@@ -712,5 +729,65 @@
                 closeEmailModal();
             }
         });
+
+        // Auto-renew toggle function
+        function toggleAutoRenew(driverId) {
+            const button = document.querySelector(`[data-driver-id="${driverId}"]`);
+            const currentStatus = button.dataset.autoRenew === 'true';
+
+            // Show loading state
+            button.disabled = true;
+            button.style.opacity = '0.6';
+
+            fetch('{{ route("driver-profiles.toggle-auto-renew") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    driver_id: driverId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update the toggle state
+                    const newStatus = data.auto_renew;
+                    button.dataset.autoRenew = newStatus ? 'true' : 'false';
+
+                    // Update button appearance
+                    if (newStatus) {
+                        button.classList.remove('bg-gray-200');
+                        button.classList.add('bg-indigo-600');
+                        button.querySelector('.toggle-slider').classList.remove('translate-x-1');
+                        button.querySelector('.toggle-slider').classList.add('translate-x-6');
+                    } else {
+                        button.classList.remove('bg-indigo-600');
+                        button.classList.add('bg-gray-200');
+                        button.querySelector('.toggle-slider').classList.remove('translate-x-6');
+                        button.querySelector('.toggle-slider').classList.add('translate-x-1');
+                    }
+
+                    // Update status text
+                    const statusText = button.parentElement.querySelector('span:last-child');
+                    statusText.textContent = newStatus ? 'Enabled' : 'Disabled';
+
+                    // Show success message
+                    showMessage(`Auto-renewal ${newStatus ? 'enabled' : 'disabled'} for driver`, 'success');
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to toggle auto-renewal'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to toggle auto-renewal. Please try again.');
+            })
+            .finally(() => {
+                // Reset button state
+                button.disabled = false;
+                button.style.opacity = '1';
+            });
+        }
     </script>
 </x-layouts.app>

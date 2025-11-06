@@ -123,4 +123,35 @@ class DriverProfileController extends Controller
             ]
         ]);
     }
+
+    /**
+     * Toggle auto renew status for a driver
+     */
+    public function toggleAutoRenew(Request $request)
+    {
+        $request->validate([
+            'driver_id' => 'required|string',
+        ]);
+
+        try {
+            // Get or create driver profile
+            $profile = DriverProfile::getOrCreateForDriver($request->driver_id);
+
+            // Toggle the auto_renew status
+            $profile->toggleAutoRenew();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Auto-renewal status updated successfully',
+                'auto_renew' => $profile->auto_renew,
+                'driver_id' => $request->driver_id
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update auto-renewal status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

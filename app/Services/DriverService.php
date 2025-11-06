@@ -262,9 +262,10 @@ class DriverService
             return $driver;
         }
 
-        $email = DriverProfile::getDriverEmail($driverId);
-        $driver['email'] = $email;
-        $driver['has_email'] = !empty($email);
+        $profile = DriverProfile::where('driver_id', $driverId)->first();
+        $driver['email'] = $profile?->email;
+        $driver['has_email'] = !empty($profile?->email);
+        $driver['auto_renew'] = $profile ? $profile->auto_renew : true;
 
         return $driver;
     }
@@ -296,9 +297,11 @@ class DriverService
                 $profile = $profiles->get($driverId);
                 $driver['email'] = $profile->email;
                 $driver['has_email'] = !empty($profile->email);
+                $driver['auto_renew'] = $profile->auto_renew;
             } else {
                 $driver['email'] = null;
                 $driver['has_email'] = false;
+                $driver['auto_renew'] = true; // Default true for drivers without profiles
             }
         }
 

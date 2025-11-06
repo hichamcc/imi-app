@@ -79,6 +79,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     // Driver Profile Routes
     Route::post('driver-profiles/update-email', [DriverProfileController::class, 'updateEmail'])->name('driver-profiles.update-email');
     Route::post('driver-profiles/bulk-update-emails', [DriverProfileController::class, 'bulkUpdateEmails'])->name('driver-profiles.bulk-update-emails');
+    Route::post('driver-profiles/toggle-auto-renew', [DriverProfileController::class, 'toggleAutoRenew'])->name('driver-profiles.toggle-auto-renew');
     Route::get('driver-profiles/{driverId}', [DriverProfileController::class, 'show'])->name('driver-profiles.show');
 });
 

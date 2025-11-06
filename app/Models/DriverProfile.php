@@ -10,6 +10,11 @@ class DriverProfile extends Model
     protected $fillable = [
         'driver_id',
         'email',
+        'auto_renew',
+    ];
+
+    protected $casts = [
+        'auto_renew' => 'boolean',
     ];
 
     /**
@@ -19,7 +24,10 @@ class DriverProfile extends Model
     {
         return static::firstOrCreate(
             ['driver_id' => $driverId],
-            ['email' => null]
+            [
+                'email' => null,
+                'auto_renew' => true
+            ]
         );
     }
 
@@ -39,5 +47,23 @@ class DriverProfile extends Model
     {
         $profile = static::where('driver_id', $driverId)->first();
         return $profile?->email;
+    }
+
+    /**
+     * Toggle auto renew status for a driver
+     */
+    public function toggleAutoRenew()
+    {
+        $this->update(['auto_renew' => !$this->auto_renew]);
+        return $this;
+    }
+
+    /**
+     * Check if driver has auto renew enabled
+     */
+    public static function isAutoRenewEnabled($driverId)
+    {
+        $profile = static::where('driver_id', $driverId)->first();
+        return $profile ? $profile->auto_renew : true; // Default true if no profile exists
     }
 }

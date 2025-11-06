@@ -44,6 +44,7 @@ class AutoSubmitExpiredDeclarations extends Command
         $createdCount = 0;
         $submittedCount = 0;
         $emailsSentCount = 0;
+        $skippedCount = 0;
         $errorCount = 0;
 
         try {
@@ -123,6 +124,16 @@ class AutoSubmitExpiredDeclarations extends Command
                                         throw new \Exception('Full declaration data does not contain driverId');
                                     }
 
+                                    // Check if auto-renew is enabled for this driver
+                                    $driverId = $fullDeclaration['driverId'];
+                                    $autoRenewEnabled = DriverProfile::isAutoRenewEnabled($driverId);
+
+                                    if (!$autoRenewEnabled) {
+                                        $this->line("    ⏭ Skipping auto-renewal for driver {$driverId} (auto-renew disabled)");
+                                        $skippedCount++;
+                                        continue;
+                                    }
+
                                     // Create new declaration with updated dates using full declaration data
                                     $newDeclarationData = $this->prepareNewDeclarationData($fullDeclaration, $today);
 
@@ -180,6 +191,7 @@ class AutoSubmitExpiredDeclarations extends Command
         $this->newLine();
         $this->info('Auto-submit process completed:');
         $this->line("  - Expired declarations found: {$expiredCount}");
+        $this->line("  - Skipped (auto-renew disabled): {$skippedCount}");
         $this->line("  - New declarations created: {$createdCount}");
         $this->line("  - New declarations submitted: {$submittedCount}");
         $this->line("  - Emails sent to drivers: {$emailsSentCount}");
@@ -189,13 +201,15 @@ class AutoSubmitExpiredDeclarations extends Command
         Log::info('AUTO-SUBMIT: Process completed', [
             'completed_at' => now()->toDateTimeString(),
             'expired_count' => $expiredCount,
+            'skipped_count' => $skippedCount,
             'created_count' => $createdCount,
             'submitted_count' => $submittedCount,
             'emails_sent_count' => $emailsSentCount,
             'error_count' => $errorCount,
             'execution_time_seconds' => $executionTime,
             'peak_memory_usage_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2),
-            'success_rate' => $expiredCount > 0 ? round(($submittedCount / $expiredCount) * 100, 2) . '%' : '100%'
+            'processed_count' => $expiredCount - $skippedCount,
+            'success_rate' => ($expiredCount - $skippedCount) > 0 ? round(($submittedCount / ($expiredCount - $skippedCount)) * 100, 2) . '%' : '100%'
         ]);
 
         return 0;
