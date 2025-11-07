@@ -220,7 +220,7 @@ class BulkDeclarationController extends Controller
                 'declarationOperationType' => $declaration['declarationOperationType'] ?? ['INTERNATIONAL_CARRIAGE'],
                 'declarationTransportType' => $declaration['declarationTransportType'] ?? ['CARRIAGE_OF_GOODS'],
                 'declarationVehiclePlateNumber' => array_values($newPlates), // Re-index array
-                'otherContactAsTransportManager' => $declaration['otherContactAsTransportManager'] ?? false,
+                'otherContactAsTransportManager' => $declaration['otherContactAsTransportManager'] ?? true, // Default to true to avoid contact field validation
                 'otherContactFirstName' => $declaration['otherContactFirstName'] ?? '',
                 'otherContactLastName' => $declaration['otherContactLastName'] ?? '',
                 'otherContactEmail' => $declaration['otherContactEmail'] ?? '',
