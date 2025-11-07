@@ -38,7 +38,7 @@ class AutoSubmitExpiredDeclarations extends Command
             'memory_usage' => memory_get_usage(true) / 1024 / 1024 . ' MB'
         ]);
 
-        $yesterday = Carbon::parse('2025-10-05')->format('Y-m-d');
+        $yesterday = Carbon::yesterday()->format('Y-m-d');
         $today = Carbon::today()->format('Y-m-d');
         $expiredCount = 0;
         $createdCount = 0;
