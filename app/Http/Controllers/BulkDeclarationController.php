@@ -214,13 +214,26 @@ class BulkDeclarationController extends Controller
                 ], 400);
             }
 
+            // Handle contact information properly based on existing declaration
+            $otherContactAsTransportManager = $declaration['otherContactAsTransportManager'] ?? false;
+
+            // If contact fields are incomplete but otherContactAsTransportManager is false,
+            // set it to true to avoid validation errors during bulk update
+            if (!$otherContactAsTransportManager) {
+                $firstName = $declaration['otherContactFirstName'] ?? '';
+                $lastName = $declaration['otherContactLastName'] ?? '';
+                if (empty(trim($firstName)) || empty(trim($lastName))) {
+                    $otherContactAsTransportManager = true;
+                }
+            }
+
             // Prepare update data (keeping other required fields from original declaration)
             $updateData = [
                 'declarationEndDate' => $declaration['declarationEndDate'],
                 'declarationOperationType' => $declaration['declarationOperationType'] ?? ['INTERNATIONAL_CARRIAGE'],
                 'declarationTransportType' => $declaration['declarationTransportType'] ?? ['CARRIAGE_OF_GOODS'],
                 'declarationVehiclePlateNumber' => array_values($newPlates), // Re-index array
-                'otherContactAsTransportManager' => $declaration['otherContactAsTransportManager'] ?? true, // Default to true to avoid contact field validation
+                'otherContactAsTransportManager' => $otherContactAsTransportManager,
                 'otherContactFirstName' => $declaration['otherContactFirstName'] ?? '',
                 'otherContactLastName' => $declaration['otherContactLastName'] ?? '',
                 'otherContactEmail' => $declaration['otherContactEmail'] ?? '',

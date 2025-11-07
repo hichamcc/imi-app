@@ -259,6 +259,19 @@ class AutoSubmitExpiredDeclarations extends Command
 
         $newEndDate = Carbon::parse($newStartDate)->addDays($originalDuration)->format('Y-m-d');
 
+        // Handle contact information properly based on existing declaration
+        $otherContactAsTransportManager = $originalDeclaration['otherContactAsTransportManager'] ?? false;
+
+        // If contact fields are incomplete but otherContactAsTransportManager is false,
+        // set it to true to avoid validation errors during auto-submit
+        if (!$otherContactAsTransportManager) {
+            $firstName = $originalDeclaration['otherContactFirstName'] ?? '';
+            $lastName = $originalDeclaration['otherContactLastName'] ?? '';
+            if (empty(trim($firstName)) || empty(trim($lastName))) {
+                $otherContactAsTransportManager = true;
+            }
+        }
+
         // Prepare new declaration data - copy relevant fields only
         $newData = [
             'declarationPostingCountry' => $originalDeclaration['declarationPostingCountry'],
@@ -268,11 +281,11 @@ class AutoSubmitExpiredDeclarations extends Command
             'declarationTransportType' => $originalDeclaration['declarationTransportType'] ?? ['CARRIAGE_OF_GOODS'],
             'declarationVehiclePlateNumber' => $originalDeclaration['declarationVehiclePlateNumber'] ?? [],
             'driverId' => $originalDeclaration['driverId'],
+            'otherContactAsTransportManager' => $otherContactAsTransportManager,
         ];
 
-        // Add optional fields if they exist
+        // Add optional contact fields if they exist
         $optionalFields = [
-            'otherContactAsTransportManager',
             'otherContactFirstName',
             'otherContactLastName',
             'otherContactEmail',
