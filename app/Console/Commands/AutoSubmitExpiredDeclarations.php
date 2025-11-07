@@ -252,12 +252,16 @@ class AutoSubmitExpiredDeclarations extends Command
      */
     private function prepareNewDeclarationData(array $originalDeclaration, string $newStartDate): array
     {
-        // Calculate new end date (start today, end in 30 days - or same duration as original)
+        // Calculate new end date (start today, end in same duration as original, but max 6 months)
         $originalStart = Carbon::parse($originalDeclaration['declarationStartDate']);
         $originalEnd = Carbon::parse($originalDeclaration['declarationEndDate']);
         $originalDuration = $originalStart->diffInDays($originalEnd);
 
-        $newEndDate = Carbon::parse($newStartDate)->addDays($originalDuration)->format('Y-m-d');
+        // Cap duration to maximum 6 months (180 days) to comply with API limits
+        $maxDuration = 180;
+        $safeDuration = min($originalDuration, $maxDuration);
+
+        $newEndDate = Carbon::parse($newStartDate)->addDays($safeDuration)->format('Y-m-d');
 
         // Handle contact information properly based on existing declaration
         $otherContactAsTransportManager = $originalDeclaration['otherContactAsTransportManager'] ?? false;
