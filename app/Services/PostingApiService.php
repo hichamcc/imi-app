@@ -253,6 +253,9 @@ class PostingApiService
             $key .= '_' . md5(serialize($params));
         }
 
+        // Include operator ID in cache key to prevent data leakage between users
+        $key .= '_' . $this->operatorId;
+
         return $this->cachePrefix . $key;
     }
 
