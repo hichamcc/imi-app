@@ -73,6 +73,9 @@ class AutoSubmitExpiredDeclarations extends Command
                         $user->api_operator_id
                     );
 
+                    // Debug: Log which credentials are being used
+                    $this->line("  DEBUG: Using API credentials - Base URL: {$user->api_base_url}, Operator ID: {$user->api_operator_id}");
+
                     // Get ALL declarations for this user using pagination
                     $allDeclarations = [];
                     $startKey = null;
@@ -112,6 +115,8 @@ class AutoSubmitExpiredDeclarations extends Command
                         // Debug logging: count declarations by end date and status
                         $yesterdayEndDateCount = 0;
                         $expiredStatusCount = 0;
+                        $endDateSamples = [];
+
                         foreach ($declarations['items'] as $decl) {
                             if (isset($decl['declarationEndDate'])) {
                                 $declEndDate = Carbon::parse($decl['declarationEndDate'])->format('Y-m-d');
@@ -122,13 +127,44 @@ class AutoSubmitExpiredDeclarations extends Command
                             }
                             if (isset($decl['declarationStatus']) && strtoupper($decl['declarationStatus']) === 'EXPIRED') {
                                 $expiredStatusCount++;
+                                // Collect sample end dates from expired declarations
+                                if (count($endDateSamples) < 10 && isset($decl['declarationEndDate'])) {
+                                    $endDateSamples[] = [
+                                        'id' => $decl['declarationId'],
+                                        'endDate' => $decl['declarationEndDate'],
+                                        'status' => $decl['declarationStatus']
+                                    ];
+                                }
                             }
                         }
+
                         $this->line("  DEBUG: Total declarations: " . count($declarations['items']));
                         $this->line("  DEBUG: Declarations with end date = yesterday ($yesterday): $yesterdayEndDateCount");
                         $this->line("  DEBUG: Declarations with EXPIRED status: $expiredStatusCount");
                         $this->line("  DEBUG: Current server timezone: " . date_default_timezone_get());
                         $this->line("  DEBUG: Current server time: " . now()->toDateTimeString());
+
+                        // Check if declarations have operator ID or other identifying fields
+                        if (!empty($declarations['items'])) {
+                            $sampleDecl = $declarations['items'][0];
+                            $identifyingFields = [];
+                            foreach (['operatorId', 'userId', 'accountId', 'companyId', 'organisationId'] as $field) {
+                                if (isset($sampleDecl[$field])) {
+                                    $identifyingFields[$field] = $sampleDecl[$field];
+                                }
+                            }
+                            if (!empty($identifyingFields)) {
+                                $this->line("  DEBUG: Sample declaration identifying fields: " . json_encode($identifyingFields));
+                            }
+                        }
+
+                        // Show sample expired declarations with their end dates
+                        if (!empty($endDateSamples)) {
+                            $this->line("  DEBUG: Sample EXPIRED declarations (showing first 10):");
+                            foreach ($endDateSamples as $sample) {
+                                $this->line("    - ID: {$sample['id']}, End Date: {$sample['endDate']}, Status: {$sample['status']}");
+                            }
+                        }
 
                         foreach ($declarations['items'] as $declaration) {
                             // Check if declaration expired yesterday and needs renewal
