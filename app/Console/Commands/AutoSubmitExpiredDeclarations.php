@@ -27,11 +27,12 @@ class AutoSubmitExpiredDeclarations extends Command
     public function handle()
     {
         $startTime = microtime(true);
-        $this->info('Starting auto-submit process for expired declarations...');
+        $currentDateTime = now()->toDateTimeString();
+        $this->info("Starting auto-submit process for expired declarations at {$currentDateTime}...");
 
         // Log the start of the process
         Log::info('AUTO-SUBMIT: Process started', [
-            'started_at' => now()->toDateTimeString(),
+            'started_at' => $currentDateTime,
             'yesterday' => Carbon::yesterday()->format('Y-m-d'),
             'today' => Carbon::today()->format('Y-m-d'),
             'process_id' => getmypid(),
