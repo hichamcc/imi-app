@@ -108,7 +108,27 @@ class AutoSubmitExpiredDeclarations extends Command
                     if (isset($declarations['items']) && is_array($declarations['items'])) {
                         // Log some sample declarations for debugging
                         $sampleDeclarations = array_slice($declarations['items'], 0, 3);
-                      
+
+                        // Debug logging: count declarations by end date and status
+                        $yesterdayEndDateCount = 0;
+                        $expiredStatusCount = 0;
+                        foreach ($declarations['items'] as $decl) {
+                            if (isset($decl['declarationEndDate'])) {
+                                $declEndDate = Carbon::parse($decl['declarationEndDate'])->format('Y-m-d');
+                                if ($declEndDate === $yesterday) {
+                                    $yesterdayEndDateCount++;
+                                    $this->line("  DEBUG: Found declaration with end date = yesterday: {$decl['declarationId']}, status: {$decl['declarationStatus']}");
+                                }
+                            }
+                            if (isset($decl['declarationStatus']) && strtoupper($decl['declarationStatus']) === 'EXPIRED') {
+                                $expiredStatusCount++;
+                            }
+                        }
+                        $this->line("  DEBUG: Total declarations: " . count($declarations['items']));
+                        $this->line("  DEBUG: Declarations with end date = yesterday ($yesterday): $yesterdayEndDateCount");
+                        $this->line("  DEBUG: Declarations with EXPIRED status: $expiredStatusCount");
+                        $this->line("  DEBUG: Current server timezone: " . date_default_timezone_get());
+                        $this->line("  DEBUG: Current server time: " . now()->toDateTimeString());
 
                         foreach ($declarations['items'] as $declaration) {
                             // Check if declaration expired yesterday and needs renewal
@@ -225,25 +245,27 @@ class AutoSubmitExpiredDeclarations extends Command
 
         // Check if declaration has an end date
         if (!isset($declaration['declarationEndDate']) || empty($declaration['declarationEndDate'])) {
-       
+            $this->line("  DEBUG: Declaration {$declarationId} has no end date, skipping");
             return false;
         }
 
         // Check if end date was exactly yesterday
         $endDate = Carbon::parse($declaration['declarationEndDate'])->format('Y-m-d');
         if ($endDate !== $yesterday) {
-        
             return false;
         }
 
-        // Only process expired declarations
+        // Check status - accept both EXPIRED and SUBMITTED (since API might not update status immediately)
         $status = $declaration['declarationStatus'] ?? '';
-        if (strtoupper($status) !== 'EXPIRED') {
-       
+        $statusUpper = strtoupper($status);
+
+        // Allow EXPIRED or SUBMITTED declarations that ended yesterday
+        if ($statusUpper !== 'EXPIRED' && $statusUpper !== 'SUBMITTED') {
+            $this->line("  DEBUG: Declaration {$declarationId} has end date = yesterday but status is '{$status}' (not EXPIRED or SUBMITTED), skipping");
             return false;
         }
 
-       
+        $this->line("  DEBUG: Declaration {$declarationId} qualifies for renewal (end date: {$endDate}, status: {$status})");
 
         return true;
     }
