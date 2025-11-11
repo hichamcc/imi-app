@@ -732,7 +732,7 @@
 
         // Auto-renew toggle function
         function toggleAutoRenew(driverId) {
-            const button = document.querySelector(`[data-driver-id="${driverId}"]`);
+            const button = document.querySelector(`.auto-renew-toggle[data-driver-id="${driverId}"]`);
             const currentStatus = button.dataset.autoRenew === 'true';
 
             // Show loading state
