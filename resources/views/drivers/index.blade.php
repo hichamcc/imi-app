@@ -137,6 +137,10 @@
                                                             class="text-green-600 hover:text-green-900 text-xs">
                                                         Save
                                                     </button>
+                                                    <button onclick="removeEmail('{{ $driver['driverId'] }}')"
+                                                            class="text-red-600 hover:text-red-900 text-xs">
+                                                        Remove
+                                                    </button>
                                                     <button onclick="cancelEdit('{{ $driver['driverId'] }}')"
                                                             class="text-gray-600 hover:text-gray-900 text-xs">
                                                         Cancel
@@ -402,14 +406,20 @@
     <script>
         // Email editing functions
         function editEmail(driverId, currentEmail) {
-            const emailCell = document.querySelector(`[data-driver-id="${driverId}"]`);
+            const emailCell = document.querySelector(`.email-cell[data-driver-id="${driverId}"]`);
             const displayDiv = emailCell.querySelector('.email-display');
             const editDiv = emailCell.querySelector('.email-edit');
             const addButton = emailCell.querySelector('button');
+            const removeButton = editDiv.querySelector('button[onclick*="removeEmail"]');
 
             // Hide display elements
             if (displayDiv) displayDiv.style.display = 'none';
             if (addButton && !displayDiv) addButton.style.display = 'none';
+
+            // Show/hide remove button based on whether there's an email
+            if (removeButton) {
+                removeButton.style.display = currentEmail ? 'inline-block' : 'none';
+            }
 
             // Show edit form
             editDiv.classList.remove('hidden');
@@ -420,8 +430,19 @@
             emailInput.focus();
         }
 
+        function removeEmail(driverId) {
+            if (!confirm('Are you sure you want to remove this email address?')) {
+                return;
+            }
+
+            const emailCell = document.querySelector(`.email-cell[data-driver-id="${driverId}"]`);
+            const emailInput = emailCell.querySelector('.email-input');
+            emailInput.value = '';
+            saveEmail(driverId);
+        }
+
         function saveEmail(driverId) {
-            const emailCell = document.querySelector(`[data-driver-id="${driverId}"]`);
+            const emailCell = document.querySelector(`.email-cell[data-driver-id="${driverId}"]`);
             const emailInput = emailCell.querySelector('.email-input');
             const email = emailInput.value.trim();
 
@@ -474,7 +495,7 @@
         }
 
         function cancelEdit(driverId) {
-            const emailCell = document.querySelector(`[data-driver-id="${driverId}"]`);
+            const emailCell = document.querySelector(`.email-cell[data-driver-id="${driverId}"]`);
             const displayDiv = emailCell.querySelector('.email-display');
             const editDiv = emailCell.querySelector('.email-edit');
             const addButton = emailCell.querySelector('button[onclick*="editEmail"]:not([onclick*="saveEmail"])');
@@ -491,7 +512,7 @@
         }
 
         function updateEmailDisplay(driverId, email) {
-            const emailCell = document.querySelector(`[data-driver-id="${driverId}"]`);
+            const emailCell = document.querySelector(`.email-cell[data-driver-id="${driverId}"]`);
 
             if (email) {
                 // Create or update email display
@@ -513,6 +534,24 @@
                         Edit
                     </button>
                 `;
+            } else {
+                // Email was removed - show add button
+                const displayDiv = emailCell.querySelector('.email-display');
+                if (displayDiv) {
+                    displayDiv.remove();
+                }
+
+                // Show or create add button
+                let addButton = emailCell.querySelector('button[onclick*="editEmail"]:not([onclick*="saveEmail"]):not([onclick*="removeEmail"])');
+                if (!addButton) {
+                    addButton = document.createElement('button');
+                    addButton.onclick = () => editEmail(driverId, '');
+                    addButton.className = 'text-blue-600 hover:text-blue-900 dark:text-blue-400 text-sm';
+                    addButton.textContent = '+ Add Email';
+                    emailCell.insertBefore(addButton, emailCell.querySelector('.email-edit'));
+                } else {
+                    addButton.style.display = 'inline-block';
+                }
             }
         }
 

@@ -22,7 +22,7 @@ class DriverProfileController extends Controller
     {
         $request->validate([
             'driver_id' => 'required|string',
-            'email' => 'required|email|max:255',
+            'email' => 'nullable|email|max:255',
         ]);
 
         try {
