@@ -593,7 +593,27 @@
             if (successCount > 0) {
                 const firstSuccess = results.find(r => r.success);
                 if (firstSuccess && confirm(`{{ __("Clone completed! Do you want to view the cloned driver in") }} ${firstSuccess.org.name}?`)) {
-                    window.location.href = `/impersonate/${firstSuccess.org.id}?redirect=/drivers/${firstSuccess.newDriverId}`;
+                    // Create a form and submit POST request to impersonate
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = `/impersonate/${firstSuccess.org.id}`;
+
+                    // Add CSRF token
+                    const csrfInput = document.createElement('input');
+                    csrfInput.type = 'hidden';
+                    csrfInput.name = '_token';
+                    csrfInput.value = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                    form.appendChild(csrfInput);
+
+                    // Add redirect parameter
+                    const redirectInput = document.createElement('input');
+                    redirectInput.type = 'hidden';
+                    redirectInput.name = 'redirect';
+                    redirectInput.value = `/drivers/${firstSuccess.newDriverId}`;
+                    form.appendChild(redirectInput);
+
+                    document.body.appendChild(form);
+                    form.submit();
                 }
             }
         }

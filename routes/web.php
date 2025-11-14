@@ -23,7 +23,7 @@ Route::get('contact-admin', function () {
 
 // Impersonation Routes (Auth users with group permissions)
 Route::middleware(['auth'])->group(function () {
-    Route::post('impersonate/{user}', function (\App\Models\User $user) {
+    Route::post('impersonate/{user}', function (\App\Models\User $user, \Illuminate\Http\Request $request) {
         if (!auth()->user()->canImpersonateUser($user)) {
             abort(403, 'Cannot impersonate this user.');
         }
@@ -32,6 +32,14 @@ Route::middleware(['auth'])->group(function () {
         \Illuminate\Support\Facades\Artisan::call('cache:clear');
 
         auth()->user()->impersonate($user);
+
+        // Check if redirect parameter is provided
+        $redirectTo = $request->input('redirect');
+        if ($redirectTo && filter_var($redirectTo, FILTER_VALIDATE_URL) === false) {
+            // If redirect is a relative path (not a full URL), use it
+            return redirect($redirectTo)->with('success', "Now impersonating {$user->name}");
+        }
+
         return redirect()->route('dashboard')->with('success', "Now impersonating {$user->name}");
     })->name('impersonate');
 
