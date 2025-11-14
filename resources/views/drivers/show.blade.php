@@ -358,9 +358,19 @@
                 </div>
 
                 <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        {{ __('Target Organization') }}
-                    </label>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {{ __('Target Organizations') }}
+                        </label>
+                        <div class="flex space-x-2">
+                            <button type="button" onclick="selectAllOrganizations()" class="text-sm text-purple-600 hover:text-purple-800 dark:text-purple-400">
+                                {{ __('Select All') }}
+                            </button>
+                            <button type="button" onclick="clearAllOrganizations()" class="text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400">
+                                {{ __('Clear All') }}
+                            </button>
+                        </div>
+                    </div>
                     <div id="organizationsLoading" class="text-center py-4">
                         <div class="inline-flex items-center">
                             <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -370,10 +380,19 @@
                             {{ __('Loading organizations...') }}
                         </div>
                     </div>
-                    <select id="targetOrganization" class="hidden w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white">
-                        <option value="">{{ __('Select target organization') }}</option>
-                    </select>
+                    <div id="organizationsList" class="hidden max-h-64 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2 space-y-2">
+                        <!-- Organizations will be loaded here as checkboxes -->
+                    </div>
                     <div id="organizationsError" class="hidden text-sm text-red-600 dark:text-red-400 mt-2"></div>
+                </div>
+
+                <div id="cloneProgress" class="hidden mb-4">
+                    <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {{ __('Cloning Progress') }}:
+                    </div>
+                    <div id="progressList" class="space-y-2 max-h-48 overflow-y-auto">
+                        <!-- Progress items will be added here -->
+                    </div>
                 </div>
 
                 <div class="flex justify-end space-x-3">
@@ -393,21 +412,23 @@
 
         function openCloneModal() {
             document.getElementById('cloneModal').classList.remove('hidden');
+            document.getElementById('cloneProgress').classList.add('hidden');
+            document.getElementById('progressList').innerHTML = '';
             loadImpersonatableUsers();
         }
 
         function closeCloneModal() {
             document.getElementById('cloneModal').classList.add('hidden');
-            document.getElementById('targetOrganization').value = '';
+            clearAllOrganizations();
         }
 
         function loadImpersonatableUsers() {
             const loadingDiv = document.getElementById('organizationsLoading');
-            const selectDiv = document.getElementById('targetOrganization');
+            const listDiv = document.getElementById('organizationsList');
             const errorDiv = document.getElementById('organizationsError');
 
             loadingDiv.classList.remove('hidden');
-            selectDiv.classList.add('hidden');
+            listDiv.classList.add('hidden');
             errorDiv.classList.add('hidden');
 
             // Get current user's impersonatable users
@@ -422,22 +443,12 @@
                 if (data.success && data.users) {
                     impersonatableUsers = data.users;
 
-                    // Populate select options
-                    const select = document.getElementById('targetOrganization');
-                    select.innerHTML = '<option value="">{{ __("Select target organization") }}</option>';
-
                     if (impersonatableUsers.length === 0) {
                         errorDiv.textContent = '{{ __("You don't have access to any other organizations.") }}';
                         errorDiv.classList.remove('hidden');
                     } else {
-                        impersonatableUsers.forEach(user => {
-                            const option = document.createElement('option');
-                            option.value = user.id;
-                            option.textContent = `${user.name} (${user.email})`;
-                            select.appendChild(option);
-                        });
-
-                        selectDiv.classList.remove('hidden');
+                        renderOrganizationsList(impersonatableUsers);
+                        listDiv.classList.remove('hidden');
                     }
                 } else {
                     errorDiv.textContent = data.message || '{{ __("Failed to load organizations") }}';
@@ -454,11 +465,55 @@
             });
         }
 
-        function cloneDriver() {
-            const targetUserId = document.getElementById('targetOrganization').value;
+        function renderOrganizationsList(users) {
+            const listDiv = document.getElementById('organizationsList');
+            listDiv.innerHTML = '';
 
-            if (!targetUserId) {
-                alert('{{ __("Please select a target organization") }}');
+            users.forEach(user => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center p-2 border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700';
+                div.innerHTML = `
+                    <input type="checkbox"
+                           id="org_${user.id}"
+                           value="${user.id}"
+                           class="organization-checkbox mr-3 h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                    <label for="org_${user.id}" class="flex-1 cursor-pointer text-sm text-gray-900 dark:text-white">
+                        <div class="font-medium">${user.name}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">${user.email}</div>
+                    </label>
+                `;
+                listDiv.appendChild(div);
+            });
+        }
+
+        function selectAllOrganizations() {
+            const checkboxes = document.querySelectorAll('.organization-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+        }
+
+        function clearAllOrganizations() {
+            const checkboxes = document.querySelectorAll('.organization-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
+        }
+
+        function getSelectedOrganizations() {
+            const checkboxes = document.querySelectorAll('.organization-checkbox:checked');
+            return Array.from(checkboxes).map(cb => ({
+                id: cb.value,
+                name: impersonatableUsers.find(u => u.id == cb.value)?.name || 'Unknown',
+                email: impersonatableUsers.find(u => u.id == cb.value)?.email || ''
+            }));
+        }
+
+        async function cloneDriver() {
+            const selectedOrgs = getSelectedOrganizations();
+
+            if (selectedOrgs.length === 0) {
+                alert('{{ __("Please select at least one target organization") }}');
                 return;
             }
 
@@ -469,41 +524,122 @@
             cloneButton.textContent = '{{ __("Cloning...") }}';
             cloneButton.disabled = true;
 
-            fetch('{{ route("drivers.clone", $driver["driverId"]) }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                },
-                body: JSON.stringify({
-                    target_user_id: targetUserId
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Show success message
-                    showMessage(data.message, 'success');
-                    closeCloneModal();
+            // Show progress section
+            document.getElementById('cloneProgress').classList.remove('hidden');
+            const progressList = document.getElementById('progressList');
+            progressList.innerHTML = '';
 
-                    // Optionally redirect to the new driver
-                    if (confirm('{{ __("Driver cloned successfully! Do you want to view the cloned driver in the target organization?") }}')) {
-                        // Impersonate the target user and view the new driver
-                        window.location.href = `/impersonate/${targetUserId}?redirect=/drivers/${data.new_driver_id}`;
+            let successCount = 0;
+            let errorCount = 0;
+            const results = [];
+
+            // Clone to each organization sequentially
+            for (const org of selectedOrgs) {
+                const progressItem = createProgressItem(org.id, org.name);
+                progressList.appendChild(progressItem);
+
+                try {
+                    const response = await fetch('{{ route("drivers.clone", $driver["driverId"]) }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        },
+                        body: JSON.stringify({
+                            target_user_id: org.id
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        successCount++;
+                        updateProgressItem(org.id, 'success', data.message, data.new_driver_id);
+                        results.push({
+                            org: org,
+                            success: true,
+                            newDriverId: data.new_driver_id
+                        });
+                    } else {
+                        errorCount++;
+                        updateProgressItem(org.id, 'error', data.message || '{{ __("Failed to clone driver") }}');
+                        results.push({
+                            org: org,
+                            success: false,
+                            error: data.message
+                        });
                     }
-                } else {
-                    alert('{{ __("Error") }}: ' + (data.message || '{{ __("Failed to clone driver") }}'));
+                } catch (error) {
+                    console.error('Error cloning to', org.name, error);
+                    errorCount++;
+                    updateProgressItem(org.id, 'error', '{{ __("Network error occurred") }}');
+                    results.push({
+                        org: org,
+                        success: false,
+                        error: error.message
+                    });
                 }
-            })
-            .catch(error => {
-                console.error('Error cloning driver:', error);
-                alert('{{ __("Failed to clone driver. Please try again.") }}');
-            })
-            .finally(() => {
-                // Reset button state
-                cloneButton.textContent = originalText;
-                cloneButton.disabled = false;
-            });
+            }
+
+            // Reset button state
+            cloneButton.textContent = originalText;
+            cloneButton.disabled = false;
+
+            // Show summary
+            const summaryMessage = `{{ __("Completed") }}: ${successCount} {{ __("successful") }}, ${errorCount} {{ __("failed") }}`;
+            showMessage(summaryMessage, errorCount === 0 ? 'success' : 'info');
+
+            // Ask if user wants to view one of the cloned drivers
+            if (successCount > 0) {
+                const firstSuccess = results.find(r => r.success);
+                if (firstSuccess && confirm(`{{ __("Clone completed! Do you want to view the cloned driver in") }} ${firstSuccess.org.name}?`)) {
+                    window.location.href = `/impersonate/${firstSuccess.org.id}?redirect=/drivers/${firstSuccess.newDriverId}`;
+                }
+            }
+        }
+
+        function createProgressItem(orgId, orgName) {
+            const div = document.createElement('div');
+            div.id = `progress_${orgId}`;
+            div.className = 'flex items-center p-2 border border-gray-200 dark:border-gray-600 rounded';
+            div.innerHTML = `
+                <div class="flex-shrink-0">
+                    <svg class="animate-spin h-5 w-5 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+                <div class="ml-3 flex-1">
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">${orgName}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ __("Cloning...") }}</div>
+                </div>
+            `;
+            return div;
+        }
+
+        function updateProgressItem(orgId, status, message, newDriverId = null) {
+            const div = document.getElementById(`progress_${orgId}`);
+            if (!div) return;
+
+            const iconHtml = status === 'success'
+                ? '<svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
+                : '<svg class="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+
+            const messageColor = status === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+
+            const messageHtml = newDriverId
+                ? `<div class="text-xs ${messageColor}">${message} (ID: ${newDriverId})</div>`
+                : `<div class="text-xs ${messageColor}">${message}</div>`;
+
+            div.innerHTML = `
+                <div class="flex-shrink-0">
+                    ${iconHtml}
+                </div>
+                <div class="ml-3 flex-1">
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">${div.querySelector('.text-sm').textContent}</div>
+                    ${messageHtml}
+                </div>
+            `;
         }
 
         function showMessage(message, type = 'info') {
