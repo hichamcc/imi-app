@@ -377,6 +377,14 @@ class DriverController extends Controller
             ];
 
             // 3. Get PostingApiService instance and switch to target user's credentials
+            \Log::info('Clone: Switching to target user credentials', [
+                'source_user_id' => auth()->id(),
+                'source_operator_id' => auth()->user()->api_operator_id,
+                'target_user_id' => $targetUser->id,
+                'target_operator_id' => $targetUser->api_operator_id,
+                'target_user_name' => $targetUser->name
+            ]);
+
             $apiService = app(\App\Services\PostingApiService::class);
             $apiService->setUserCredentials(
                 $targetUser->api_base_url,
@@ -385,6 +393,12 @@ class DriverController extends Controller
             );
 
             // 4. Create driver in target organization
+            \Log::info('Clone: Creating driver in target organization', [
+                'target_user_id' => $targetUser->id,
+                'target_operator_id' => $targetUser->api_operator_id,
+                'driver_data' => $cloneData
+            ]);
+
             $newDriver = $apiService->post(config('posting.endpoints.drivers'), $cloneData);
 
             if (!isset($newDriver['driverId'])) {

@@ -17,6 +17,7 @@ class PostingApiService
     protected bool $cacheEnabled;
     protected int $cacheTtl;
     protected string $cachePrefix;
+    protected bool $manualCredentials = false;
 
     public function __construct()
     {
@@ -43,6 +44,7 @@ class PostingApiService
             'operator_id' => $operatorId
         ]);
 
+        $this->manualCredentials = true; // Prevent auto-refresh
         $this->baseUrl = $baseUrl;
         $this->apiKey = $apiKey;
         $this->operatorId = $operatorId;
@@ -75,6 +77,12 @@ class PostingApiService
      */
     private function refreshUserCredentials(): void
     {
+        // Skip auto-refresh if credentials were manually set
+        if ($this->manualCredentials) {
+            \Log::info('PostingApiService - Skipping auto-refresh (manual credentials set)');
+            return;
+        }
+
         if (auth()->check() && auth()->user()->hasValidApiCredentials()) {
             $user = auth()->user();
             \Log::info('PostingApiService - Refreshing credentials from database', [
