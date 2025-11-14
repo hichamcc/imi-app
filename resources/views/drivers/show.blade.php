@@ -12,6 +12,9 @@
                 <a href="{{ route('drivers.edit', $driver['driverId']) }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                     {{ __('Edit Driver') }}
                 </a>
+                <button onclick="openCloneModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    {{ __('Clone to Organization') }}
+                </button>
                 <a href="{{ route('drivers.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                     {{ __('Back to Drivers') }}
                 </a>
@@ -320,4 +323,216 @@
             </div>
         </div>
     </div>
+
+    <!-- Clone Driver Modal -->
+    <div id="cloneModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-[600px] shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+                        {{ __('Clone Driver to Another Organization') }}
+                    </h3>
+                    <button onclick="closeCloneModal()" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-blue-800 dark:text-blue-200">
+                                {{ __('Source Driver') }}: <strong>{{ $driver['driverFullName'] ?? (($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')) }}</strong>
+                            </p>
+                            <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                                {{ __('The driver will be created as a new driver with a new ID. No declarations will be copied.') }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {{ __('Target Organization') }}
+                    </label>
+                    <div id="organizationsLoading" class="text-center py-4">
+                        <div class="inline-flex items-center">
+                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {{ __('Loading organizations...') }}
+                        </div>
+                    </div>
+                    <select id="targetOrganization" class="hidden w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white">
+                        <option value="">{{ __('Select target organization') }}</option>
+                    </select>
+                    <div id="organizationsError" class="hidden text-sm text-red-600 dark:text-red-400 mt-2"></div>
+                </div>
+
+                <div class="flex justify-end space-x-3">
+                    <button onclick="closeCloneModal()" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-400 dark:hover:bg-gray-500">
+                        {{ __('Cancel') }}
+                    </button>
+                    <button onclick="cloneDriver()" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700" id="cloneButton">
+                        {{ __('Clone Driver') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let impersonatableUsers = [];
+
+        function openCloneModal() {
+            document.getElementById('cloneModal').classList.remove('hidden');
+            loadImpersonatableUsers();
+        }
+
+        function closeCloneModal() {
+            document.getElementById('cloneModal').classList.add('hidden');
+            document.getElementById('targetOrganization').value = '';
+        }
+
+        function loadImpersonatableUsers() {
+            const loadingDiv = document.getElementById('organizationsLoading');
+            const selectDiv = document.getElementById('targetOrganization');
+            const errorDiv = document.getElementById('organizationsError');
+
+            loadingDiv.classList.remove('hidden');
+            selectDiv.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+
+            // Get current user's impersonatable users
+            fetch('/api/impersonatable-users', {
+                method: 'GET',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.users) {
+                    impersonatableUsers = data.users;
+
+                    // Populate select options
+                    const select = document.getElementById('targetOrganization');
+                    select.innerHTML = '<option value="">{{ __("Select target organization") }}</option>';
+
+                    if (impersonatableUsers.length === 0) {
+                        errorDiv.textContent = '{{ __("You don't have access to any other organizations.") }}';
+                        errorDiv.classList.remove('hidden');
+                    } else {
+                        impersonatableUsers.forEach(user => {
+                            const option = document.createElement('option');
+                            option.value = user.id;
+                            option.textContent = `${user.name} (${user.email})`;
+                            select.appendChild(option);
+                        });
+
+                        selectDiv.classList.remove('hidden');
+                    }
+                } else {
+                    errorDiv.textContent = data.message || '{{ __("Failed to load organizations") }}';
+                    errorDiv.classList.remove('hidden');
+                }
+
+                loadingDiv.classList.add('hidden');
+            })
+            .catch(error => {
+                console.error('Error loading organizations:', error);
+                errorDiv.textContent = '{{ __("Failed to load organizations. Please try again.") }}';
+                errorDiv.classList.remove('hidden');
+                loadingDiv.classList.add('hidden');
+            });
+        }
+
+        function cloneDriver() {
+            const targetUserId = document.getElementById('targetOrganization').value;
+
+            if (!targetUserId) {
+                alert('{{ __("Please select a target organization") }}');
+                return;
+            }
+
+            const cloneButton = document.getElementById('cloneButton');
+            const originalText = cloneButton.textContent;
+
+            // Show loading state
+            cloneButton.textContent = '{{ __("Cloning...") }}';
+            cloneButton.disabled = true;
+
+            fetch('{{ route("drivers.clone", $driver["driverId"]) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    target_user_id: targetUserId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    showMessage(data.message, 'success');
+                    closeCloneModal();
+
+                    // Optionally redirect to the new driver
+                    if (confirm('{{ __("Driver cloned successfully! Do you want to view the cloned driver in the target organization?") }}')) {
+                        // Impersonate the target user and view the new driver
+                        window.location.href = `/impersonate/${targetUserId}?redirect=/drivers/${data.new_driver_id}`;
+                    }
+                } else {
+                    alert('{{ __("Error") }}: ' + (data.message || '{{ __("Failed to clone driver") }}'));
+                }
+            })
+            .catch(error => {
+                console.error('Error cloning driver:', error);
+                alert('{{ __("Failed to clone driver. Please try again.") }}');
+            })
+            .finally(() => {
+                // Reset button state
+                cloneButton.textContent = originalText;
+                cloneButton.disabled = false;
+            });
+        }
+
+        function showMessage(message, type = 'info') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-white z-50 ${
+                type === 'success' ? 'bg-green-500' :
+                type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+            }`;
+            messageDiv.textContent = message;
+            document.body.appendChild(messageDiv);
+
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 5000);
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('cloneModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCloneModal();
+            }
+        });
+
+        // Add CSRF token to head if not already present
+        if (!document.querySelector('meta[name="csrf-token"]')) {
+            const metaTag = document.createElement('meta');
+            metaTag.name = 'csrf-token';
+            metaTag.content = '{{ csrf_token() }}';
+            document.head.appendChild(metaTag);
+        }
+    </script>
 </x-layouts.app>

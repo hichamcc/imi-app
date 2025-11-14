@@ -52,11 +52,29 @@ Route::post('leave-impersonation', function () {
     return redirect()->route('dashboard');
 })->middleware(['auth'])->name('leave-impersonation');
 
+Route::middleware(['auth'])->group(function () {
+    // API endpoint to get impersonatable users
+    Route::get('api/impersonatable-users', function () {
+        $users = auth()->user()->getImpersonatableUsers();
+        return response()->json([
+            'success' => true,
+            'users' => $users->map(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email
+                ];
+            })
+        ]);
+    });
+});
+
 Route::middleware(['auth', 'api.credentials'])->group(function () {
     // Driver Management Routes
     Route::resource('drivers', DriverController::class);
     Route::get('drivers/{driver}/declarations', [DriverController::class, 'getDeclarations'])->name('drivers.declarations');
     Route::post('drivers/send-declarations', [DriverController::class, 'sendDeclarations'])->name('drivers.send-declarations');
+    Route::post('drivers/{driver}/clone', [DriverController::class, 'clone'])->name('drivers.clone');
 
     // Declaration Management Routes
     Route::resource('declarations', DeclarationController::class);

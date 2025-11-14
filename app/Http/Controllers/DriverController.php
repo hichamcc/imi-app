@@ -335,4 +335,102 @@ class DriverController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Clone a driver to another organization
+     */
+    public function clone(Request $request, string $sourceDriverId)
+    {
+        $request->validate([
+            'target_user_id' => 'required|exists:users,id'
+        ]);
+
+        try {
+            $targetUser = \App\Models\User::findOrFail($request->target_user_id);
+
+            // Check permission - user must be able to impersonate target user
+            if (!auth()->user()->canImpersonateUser($targetUser)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have access to the target organization'
+                ], 403);
+            }
+
+            // 1. Fetch source driver from current user's organization
+            $sourceDriver = $this->driverService->getDriver($sourceDriverId);
+
+            // 2. Prepare data for cloning (only required fields)
+            $cloneData = [
+                'driverLatinFirstName' => $sourceDriver['driverLatinFirstName'],
+                'driverLatinLastName' => $sourceDriver['driverLatinLastName'],
+                'driverDateOfBirth' => $sourceDriver['driverDateOfBirth'],
+                'driverLicenseNumber' => $sourceDriver['driverLicenseNumber'],
+                'driverDocumentType' => $sourceDriver['driverDocumentType'],
+                'driverDocumentNumber' => $sourceDriver['driverDocumentNumber'],
+                'driverDocumentIssuingCountry' => $sourceDriver['driverDocumentIssuingCountry'],
+                'driverAddressStreet' => $sourceDriver['driverAddressStreet'],
+                'driverAddressPostCode' => $sourceDriver['driverAddressPostCode'],
+                'driverAddressCity' => $sourceDriver['driverAddressCity'],
+                'driverAddressCountry' => $sourceDriver['driverAddressCountry'],
+                'driverContractStartDate' => $sourceDriver['driverContractStartDate'],
+                'driverApplicableLaw' => $sourceDriver['driverApplicableLaw'],
+            ];
+
+            // 3. Get PostingApiService instance and switch to target user's credentials
+            $apiService = app(\App\Services\PostingApiService::class);
+            $apiService->setUserCredentials(
+                $targetUser->api_base_url,
+                $targetUser->api_key,
+                $targetUser->api_operator_id
+            );
+
+            // 4. Create driver in target organization
+            $newDriver = $apiService->post(config('posting.endpoints.drivers'), $cloneData);
+
+            if (!isset($newDriver['driverId'])) {
+                throw new \Exception('Failed to create driver in target organization. No driver ID returned.');
+            }
+
+            $newDriverId = $newDriver['driverId'];
+
+            // 5. Copy DriverProfile settings (email, auto_renew) if they exist
+            $sourceProfile = \App\Models\DriverProfile::where('driver_id', $sourceDriverId)->first();
+            if ($sourceProfile) {
+                \App\Models\DriverProfile::create([
+                    'driver_id' => $newDriverId,
+                    'email' => $sourceProfile->email,
+                    'auto_renew' => $sourceProfile->auto_renew,
+                ]);
+            }
+
+            \Log::info('Driver cloned successfully', [
+                'source_driver_id' => $sourceDriverId,
+                'new_driver_id' => $newDriverId,
+                'source_user_id' => auth()->id(),
+                'target_user_id' => $targetUser->id,
+                'target_organization' => $targetUser->name,
+                'cloned_at' => now()->toDateTimeString()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Driver successfully cloned to {$targetUser->name}",
+                'new_driver_id' => $newDriverId,
+                'target_organization' => $targetUser->name
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Driver clone failed', [
+                'source_driver_id' => $sourceDriverId,
+                'target_user_id' => $request->target_user_id ?? 'unknown',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to clone driver: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
