@@ -469,4 +469,164 @@ class DeclarationController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Bulk delete draft declarations
+     */
+    public function bulkDelete(Request $request)
+    {
+        $request->validate([
+            'declaration_ids' => 'required|array|min:1',
+            'declaration_ids.*' => 'string'
+        ]);
+
+        try {
+            $declarationIds = $request->declaration_ids;
+            $deletedCount = 0;
+            $skippedCount = 0;
+            $errors = [];
+
+            foreach ($declarationIds as $declarationId) {
+                try {
+                    // Get declaration to check status
+                    $declaration = $this->declarationService->getDeclaration($declarationId);
+
+                    // Only delete DRAFT declarations
+                    if (($declaration['declarationStatus'] ?? '') !== 'DRAFT') {
+                        $skippedCount++;
+                        $errors[] = "Declaration {$declarationId} is not a draft (status: {$declaration['declarationStatus']})";
+                        continue;
+                    }
+
+                    // Delete the declaration
+                    $this->declarationService->deleteDeclaration($declarationId);
+                    $deletedCount++;
+
+                    \Log::info('Declaration deleted via bulk action', [
+                        'declaration_id' => $declarationId,
+                        'deleted_by' => auth()->id(),
+                        'deleted_at' => now()->toDateTimeString()
+                    ]);
+
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to delete {$declarationId}: " . $e->getMessage();
+                    \Log::error('Bulk delete error', [
+                        'declaration_id' => $declarationId,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            $success = $deletedCount > 0;
+            $message = "Deleted {$deletedCount} declaration(s)";
+
+            if ($skippedCount > 0) {
+                $message .= ", skipped {$skippedCount} (not draft)";
+            }
+
+            if (!empty($errors)) {
+                $message .= ". Errors: " . implode(', ', $errors);
+            }
+
+            return response()->json([
+                'success' => $success,
+                'message' => $message,
+                'deleted_count' => $deletedCount,
+                'skipped_count' => $skippedCount,
+                'error_count' => count($errors),
+                'errors' => $errors
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Bulk delete failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete declarations: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Bulk withdraw submitted declarations
+     */
+    public function bulkWithdraw(Request $request)
+    {
+        $request->validate([
+            'declaration_ids' => 'required|array|min:1',
+            'declaration_ids.*' => 'string'
+        ]);
+
+        try {
+            $declarationIds = $request->declaration_ids;
+            $withdrawnCount = 0;
+            $skippedCount = 0;
+            $errors = [];
+
+            foreach ($declarationIds as $declarationId) {
+                try {
+                    // Get declaration to check status
+                    $declaration = $this->declarationService->getDeclaration($declarationId);
+
+                    // Only withdraw SUBMITTED declarations
+                    if (($declaration['declarationStatus'] ?? '') !== 'SUBMITTED') {
+                        $skippedCount++;
+                        $errors[] = "Declaration {$declarationId} is not submitted (status: {$declaration['declarationStatus']})";
+                        continue;
+                    }
+
+                    // Withdraw the declaration
+                    $this->declarationService->withdrawDeclaration($declarationId);
+                    $withdrawnCount++;
+
+                    \Log::info('Declaration withdrawn via bulk action', [
+                        'declaration_id' => $declarationId,
+                        'withdrawn_by' => auth()->id(),
+                        'withdrawn_at' => now()->toDateTimeString()
+                    ]);
+
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to withdraw {$declarationId}: " . $e->getMessage();
+                    \Log::error('Bulk withdraw error', [
+                        'declaration_id' => $declarationId,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            $success = $withdrawnCount > 0;
+            $message = "Withdrawn {$withdrawnCount} declaration(s)";
+
+            if ($skippedCount > 0) {
+                $message .= ", skipped {$skippedCount} (not submitted)";
+            }
+
+            if (!empty($errors)) {
+                $message .= ". Errors: " . implode(', ', $errors);
+            }
+
+            return response()->json([
+                'success' => $success,
+                'message' => $message,
+                'withdrawn_count' => $withdrawnCount,
+                'skipped_count' => $skippedCount,
+                'error_count' => count($errors),
+                'errors' => $errors
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Bulk withdraw failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to withdraw declarations: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

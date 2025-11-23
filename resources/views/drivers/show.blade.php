@@ -148,9 +148,14 @@
                 <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ __('Declarations') }}</h2>
-                        <span class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 text-xs font-medium px-2.5 py-0.5 rounded">
-                            {{ count($declarations) }} {{ __('declarations') }}
-                        </span>
+                        <div class="flex items-center space-x-3">
+                            <button id="withdrawSelectedBtn" onclick="withdrawSelected()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm hidden">
+                                {{ __('Withdraw Selected') }} (<span id="withdrawCount">0</span>)
+                            </button>
+                            <span class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 text-xs font-medium px-2.5 py-0.5 rounded">
+                                {{ count($declarations) }} {{ __('declarations') }}
+                            </span>
+                        </div>
                     </div>
 
                     @if(count($declarations) > 0)
@@ -158,6 +163,12 @@
                             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                 <thead class="bg-gray-50 dark:bg-gray-700">
                                     <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                            <div class="flex items-center">
+                                                <input type="checkbox" id="selectAllWithdraw" onchange="toggleSelectAllWithdraw()" class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded">
+                                                <label for="selectAllWithdraw" class="ml-2 sr-only">{{ __('Select All') }}</label>
+                                            </div>
+                                        </th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                             {{ __('Declaration ID') }}
                                         </th>
@@ -178,6 +189,14 @@
                                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                     @foreach($declarations as $declaration)
                                         <tr>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                @if(($declaration['declarationStatus'] ?? '') === 'SUBMITTED')
+                                                    <input type="checkbox"
+                                                           class="withdraw-checkbox h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                                                           value="{{ $declaration['declarationId'] }}"
+                                                           onchange="updateWithdrawCount()">
+                                                @endif
+                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                                                 {{ substr($declaration['declarationId'] ?? 'N/A', 0, 8) }}...
                                             </td>
@@ -689,6 +708,83 @@
             metaTag.name = 'csrf-token';
             metaTag.content = '{{ csrf_token() }}';
             document.head.appendChild(metaTag);
+        }
+
+        // Bulk withdraw functions
+        function updateWithdrawCount() {
+            const checkboxes = document.querySelectorAll('.withdraw-checkbox:checked');
+            const count = checkboxes.length;
+            const withdrawCountElement = document.getElementById('withdrawCount');
+            const withdrawBtn = document.getElementById('withdrawSelectedBtn');
+
+            withdrawCountElement.textContent = count;
+
+            if (count > 0) {
+                withdrawBtn.classList.remove('hidden');
+            } else {
+                withdrawBtn.classList.add('hidden');
+            }
+        }
+
+        function toggleSelectAllWithdraw() {
+            const selectAllCheckbox = document.getElementById('selectAllWithdraw');
+            const checkboxes = document.querySelectorAll('.withdraw-checkbox');
+
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+
+            updateWithdrawCount();
+        }
+
+        async function withdrawSelected() {
+            const checkboxes = document.querySelectorAll('.withdraw-checkbox:checked');
+            const declarationIds = Array.from(checkboxes).map(cb => cb.value);
+
+            if (declarationIds.length === 0) {
+                alert('{{ __("Please select at least one declaration to withdraw.") }}');
+                return;
+            }
+
+            if (!confirm(`{{ __("Are you sure you want to WITHDRAW") }} ${declarationIds.length} {{ __("selected declarations?") }}`)) {
+                return;
+            }
+
+            const withdrawBtn = document.getElementById('withdrawSelectedBtn');
+            const originalText = withdrawBtn.innerHTML;
+            withdrawBtn.disabled = true;
+            withdrawBtn.innerHTML = '{{ __("Withdrawing...") }}';
+
+            try {
+                const response = await fetch('{{ route("declarations.bulk-withdraw") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({
+                        declaration_ids: declarationIds
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showMessage(result.message, 'success');
+                    // Refresh page to show updated statuses
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showMessage('{{ __("Error") }}: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error withdrawing declarations:', error);
+                showMessage('{{ __("Failed to withdraw declarations. Please try again.") }}', 'error');
+            } finally {
+                withdrawBtn.disabled = false;
+                withdrawBtn.innerHTML = originalText;
+            }
         }
     </script>
 </x-layouts.app>

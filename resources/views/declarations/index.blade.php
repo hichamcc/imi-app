@@ -7,6 +7,9 @@
                 <p class="text-gray-600 dark:text-gray-400">{{ __('Manage your transport posting declarations') }}</p>
             </div>
             <div class="flex space-x-3">
+                <button id="deleteSelectedBtn" onclick="deleteSelected()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors hidden">
+                    {{ __('Delete Selected') }} (<span id="deleteCount">0</span>)
+                </button>
                 <button id="submitSelectedBtn" onclick="submitSelected()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors hidden">
                     {{ __('Submit Selected') }} (<span id="selectedCount">0</span>)
                 </button>
@@ -263,14 +266,19 @@
             const checkboxes = document.querySelectorAll('.declaration-checkbox:checked');
             const count = checkboxes.length;
             const selectedCountElement = document.getElementById('selectedCount');
+            const deleteCountElement = document.getElementById('deleteCount');
             const submitBtn = document.getElementById('submitSelectedBtn');
+            const deleteBtn = document.getElementById('deleteSelectedBtn');
 
             selectedCountElement.textContent = count;
+            deleteCountElement.textContent = count;
 
             if (count > 0) {
                 submitBtn.classList.remove('hidden');
+                deleteBtn.classList.remove('hidden');
             } else {
                 submitBtn.classList.add('hidden');
+                deleteBtn.classList.add('hidden');
             }
         }
 
@@ -367,6 +375,53 @@
             // Refresh page to show updated statuses
             if (successCount > 0) {
                 window.location.reload();
+            }
+        }
+
+        async function deleteSelected() {
+            const checkboxes = document.querySelectorAll('.declaration-checkbox:checked');
+            const declarationIds = Array.from(checkboxes).map(cb => cb.value);
+
+            if (declarationIds.length === 0) {
+                alert('{{ __("Please select at least one declaration to delete.") }}');
+                return;
+            }
+
+            if (!confirm(`{{ __("Are you sure you want to DELETE") }} ${declarationIds.length} {{ __("selected draft declarations? This action cannot be undone.") }}`)) {
+                return;
+            }
+
+            const deleteBtn = document.getElementById('deleteSelectedBtn');
+            const originalText = deleteBtn.innerHTML;
+            deleteBtn.disabled = true;
+
+            try {
+                const response = await fetch('{{ route("declarations.bulk-delete") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({
+                        declaration_ids: declarationIds
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    // Refresh page to show updated list
+                    window.location.reload();
+                } else {
+                    alert('{{ __("Error") }}: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error deleting declarations:', error);
+                alert('{{ __("Failed to delete declarations. Please try again.") }}');
+            } finally {
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = originalText;
             }
         }
     </script>
