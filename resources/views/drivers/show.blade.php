@@ -463,7 +463,7 @@
                     </div>
                 </div>
 
-                <form id="certificateForm" method="GET" action="{{ route('drivers.download-certificate', $driver['driverId']) }}">
+                <form id="certificateForm">
                     <div class="mb-4">
                         <label for="hiring_company" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             {{ __('Hiring Company') }} <span class="text-red-500">*</span>
@@ -482,7 +482,7 @@
                         <button type="button" onclick="closeCertificateModal()" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-400 dark:hover:bg-gray-500">
                             {{ __('Cancel') }}
                         </button>
-                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        <button type="button" onclick="downloadCertificate()" id="downloadCertificateBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                             {{ __('Download Certificate') }}
                         </button>
                     </div>
@@ -501,6 +501,42 @@
         function closeCertificateModal() {
             document.getElementById('certificateModal').classList.add('hidden');
             document.getElementById('certificateForm').reset();
+        }
+
+        function downloadCertificate() {
+            const hiringCompany = document.getElementById('hiring_company').value;
+
+            if (!hiringCompany) {
+                alert('{{ __("Please select a hiring company") }}');
+                return;
+            }
+
+            const downloadBtn = document.getElementById('downloadCertificateBtn');
+            const originalText = downloadBtn.textContent;
+
+            // Show loading state
+            downloadBtn.textContent = '{{ __("Generating...") }}';
+            downloadBtn.disabled = true;
+
+            // Create download URL with query parameter
+            const url = '{{ route("drivers.download-certificate", $driver["driverId"]) }}' +
+                        '?hiring_company=' + encodeURIComponent(hiringCompany);
+
+            // Create a temporary link and trigger download
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Driver_Authorization_Certificate.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Reset button state and close modal after a short delay
+            setTimeout(() => {
+                downloadBtn.textContent = originalText;
+                downloadBtn.disabled = false;
+                closeCertificateModal();
+                showMessage('{{ __("Certificate download started") }}', 'success');
+            }, 1000);
         }
 
         // Close certificate modal when clicking outside
