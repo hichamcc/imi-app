@@ -532,43 +532,63 @@ class DriverController extends Controller
      */
     private function generateCertificatePDF(string $leasedEmployee, string $leasingCompany, string $hiringCompany, string $effectivePeriod): string
     {
-        // Path to the template PDF
-        $templatePath = public_path('DRIVER AUTHORIZATION CERTIFICATE.pdf');
+        try {
+            // Path to the template PDF
+            $templatePath = public_path('DRIVER AUTHORIZATION CERTIFICATE.pdf');
 
-        // Initialize FPDI
-        $pdf = new \setasign\Fpdi\Fpdi();
+            if (!file_exists($templatePath)) {
+                throw new \Exception('PDF template not found at: ' . $templatePath);
+            }
 
-        // Import the first page from the template
-        $pageCount = $pdf->setSourceFile($templatePath);
-        $templateId = $pdf->importPage(1);
+            // Initialize FPDI with FPDF
+            $pdf = new \setasign\Fpdi\Fpdi();
 
-        // Add a page
-        $pdf->AddPage();
+            // Set the PDF parser to handle PDF 1.7
+            $pdf->setSourceFile($templatePath);
 
-        // Use the imported page as template
-        $pdf->useTemplate($templateId, 0, 0, 210); // A4 width = 210mm
+            // Import the first page
+            $templateId = $pdf->importPage(1);
 
-        // Set font for adding text
-        $pdf->SetFont('Arial', '', 11);
-        $pdf->SetTextColor(0, 0, 0);
+            // Get the size of the imported page
+            $size = $pdf->getTemplateSize($templateId);
 
-        // Add Leased Employee (positioned after "Leased Employee:")
-        $pdf->SetXY(20, 52); // Adjust X,Y coordinates as needed
-        $pdf->Write(0, $leasedEmployee);
+            // Add a page with the same orientation and size as the template
+            if ($size['width'] > $size['height']) {
+                $pdf->AddPage('L', [$size['width'], $size['height']]);
+            } else {
+                $pdf->AddPage('P', [$size['width'], $size['height']]);
+            }
 
-        // Add Leasing Company (positioned after "Leasing Company:")
-        $pdf->SetXY(20, 72); // Adjust Y coordinate
-        $pdf->Write(0, $leasingCompany);
+            // Use the imported page as template
+            $pdf->useTemplate($templateId, 0, 0, $size['width'], $size['height']);
 
-        // Add Hiring Company (positioned after "Hiring Company (Lessee):")
-        $pdf->SetXY(20, 92); // Adjust Y coordinate
-        $pdf->Write(0, $hiringCompany);
+            // Set font for adding text
+            $pdf->SetFont('Arial', '', 11);
+            $pdf->SetTextColor(0, 0, 0);
 
-        // Add Effective Period (positioned after "Effective Period:")
-        $pdf->SetXY(20, 142); // Adjust Y coordinate
-        $pdf->Write(0, $effectivePeriod);
+            // Add Leased Employee (positioned after "Leased Employee:")
+            $pdf->SetXY(20, 52); // Adjust X,Y coordinates as needed
+            $pdf->Write(0, $leasedEmployee);
 
-        // Return PDF as string
-        return $pdf->Output('S');
+            // Add Leasing Company (positioned after "Leasing Company:")
+            $pdf->SetXY(20, 72); // Adjust Y coordinate
+            $pdf->Write(0, $leasingCompany);
+
+            // Add Hiring Company (positioned after "Hiring Company (Lessee):")
+            $pdf->SetXY(20, 92); // Adjust Y coordinate
+            $pdf->Write(0, $hiringCompany);
+
+            // Add Effective Period (positioned after "Effective Period:")
+            $pdf->SetXY(20, 142); // Adjust Y coordinate
+            $pdf->Write(0, $effectivePeriod);
+
+            // Return PDF as string
+            return $pdf->Output('S');
+
+        } catch (\Exception $e) {
+            \Log::error('PDF Generation Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            throw $e;
+        }
     }
 }
