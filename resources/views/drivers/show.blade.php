@@ -278,6 +278,10 @@
                            class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-center block">
                             {{ __('Edit Driver') }}
                         </a>
+                        <button onclick="openCertificateModal()"
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            {{ __('Download Certificate') }}
+                        </button>
                         <button onclick="if(confirm('{{ __('Are you sure you want to delete this driver?') }}')) { document.getElementById('delete-form').submit(); }"
                                 class="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                             {{ __('Delete Driver') }}
@@ -426,8 +430,85 @@
         </div>
     </div>
 
+    <!-- Certificate Download Modal -->
+    <div id="certificateModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+                        {{ __('Download Authorization Certificate') }}
+                    </h3>
+                    <button onclick="closeCertificateModal()" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-blue-800 dark:text-blue-200">
+                                {{ __('Driver') }}: <strong>{{ ($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '') }}</strong>
+                            </p>
+                            <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                                {{ __('Certificate will include driver information and declaration periods.') }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="certificateForm" method="GET" action="{{ route('drivers.download-certificate', $driver['driverId']) }}">
+                    <div class="mb-4">
+                        <label for="hiring_company" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            {{ __('Hiring Company') }} <span class="text-red-500">*</span>
+                        </label>
+                        <select name="hiring_company" id="hiring_company" required
+                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">{{ __('Select Hiring Company') }}</option>
+                            <option value="NTT Sp.Z.o.o Nr. 6692552195">NTT Sp.Z.o.o Nr. 6692552195</option>
+                            <option value="W.T.T. Sp.Z.o.o Nr. 6692577605">W.T.T. Sp.Z.o.o Nr. 6692577605</option>
+                            <option value="W.T. Transport Sp.Z.o.o. Nr. 6692589100">W.T. Transport Sp.Z.o.o. Nr. 6692589100</option>
+                            <option value="Wetter Transprt ApS Nr. 21150304">Wetter Transprt ApS Nr. 21150304</option>
+                        </select>
+                    </div>
+
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="closeCertificateModal()" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-400 dark:hover:bg-gray-500">
+                            {{ __('Cancel') }}
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                            {{ __('Download Certificate') }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
         let impersonatableUsers = [];
+
+        function openCertificateModal() {
+            document.getElementById('certificateModal').classList.remove('hidden');
+        }
+
+        function closeCertificateModal() {
+            document.getElementById('certificateModal').classList.add('hidden');
+            document.getElementById('certificateForm').reset();
+        }
+
+        // Close certificate modal when clicking outside
+        document.getElementById('certificateModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCertificateModal();
+            }
+        });
 
         function openCloneModal() {
             document.getElementById('cloneModal').classList.remove('hidden');

@@ -447,4 +447,128 @@ class DriverController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Download driver authorization certificate
+     */
+    public function downloadCertificate(Request $request, string $id)
+    {
+        $request->validate([
+            'hiring_company' => 'required|string'
+        ]);
+
+        try {
+            $driver = $this->driverService->getDriver($id);
+            $declarations = $this->getDriverDeclarations($driver);
+            $hiringCompany = $request->hiring_company;
+
+            // Calculate effective period from declarations
+            $effectivePeriod = $this->calculateEffectivePeriod($declarations);
+
+            // Prepare certificate data
+            $leasedEmployee = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''))
+                            . ' - NR. ' . ($driver['driverLicenseNumber'] ?? 'N/A');
+            $leasingCompany = 'PWR WORK LTD - NR. HE467938';
+
+            // Generate the PDF
+            $pdf = $this->generateCertificatePDF($leasedEmployee, $leasingCompany, $hiringCompany, $effectivePeriod);
+
+            // Output the PDF for download
+            $fileName = 'Driver_Authorization_Certificate_' . ($driver['driverLatinLastName'] ?? 'Driver') . '_' . date('Y-m-d') . '.pdf';
+
+            return response($pdf, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            ]);
+
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Failed to generate certificate: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Calculate effective period from declarations
+     */
+    private function calculateEffectivePeriod(array $declarations): string
+    {
+        if (empty($declarations)) {
+            // Default to 6 months from today
+            $startDate = date('Y-m-d');
+            $endDate = date('Y-m-d', strtotime('+6 months'));
+            return $startDate . ' - ' . $endDate;
+        }
+
+        $startDates = [];
+        $endDates = [];
+
+        foreach ($declarations as $declaration) {
+            if (isset($declaration['declarationStartDate'])) {
+                $startDates[] = $declaration['declarationStartDate'];
+            }
+            if (isset($declaration['declarationEndDate'])) {
+                $endDates[] = $declaration['declarationEndDate'];
+            }
+        }
+
+        if (empty($startDates) || empty($endDates)) {
+            // Default to 6 months from today
+            $startDate = date('Y-m-d');
+            $endDate = date('Y-m-d', strtotime('+6 months'));
+            return $startDate . ' - ' . $endDate;
+        }
+
+        // Get the earliest start date and latest end date
+        sort($startDates);
+        rsort($endDates);
+
+        $earliestStart = $startDates[0];
+        $latestEnd = $endDates[0];
+
+        return $earliestStart . ' - ' . $latestEnd;
+    }
+
+    /**
+     * Generate certificate PDF with filled information
+     */
+    private function generateCertificatePDF(string $leasedEmployee, string $leasingCompany, string $hiringCompany, string $effectivePeriod): string
+    {
+        // Path to the template PDF
+        $templatePath = public_path('DRIVER AUTHORIZATION CERTIFICATE.pdf');
+
+        // Initialize FPDI
+        $pdf = new \setasign\Fpdi\Fpdi();
+
+        // Import the first page from the template
+        $pageCount = $pdf->setSourceFile($templatePath);
+        $templateId = $pdf->importPage(1);
+
+        // Add a page
+        $pdf->AddPage();
+
+        // Use the imported page as template
+        $pdf->useTemplate($templateId, 0, 0, 210); // A4 width = 210mm
+
+        // Set font for adding text
+        $pdf->SetFont('Arial', '', 11);
+        $pdf->SetTextColor(0, 0, 0);
+
+        // Add Leased Employee (positioned after "Leased Employee:")
+        $pdf->SetXY(20, 52); // Adjust X,Y coordinates as needed
+        $pdf->Write(0, $leasedEmployee);
+
+        // Add Leasing Company (positioned after "Leasing Company:")
+        $pdf->SetXY(20, 72); // Adjust Y coordinate
+        $pdf->Write(0, $leasingCompany);
+
+        // Add Hiring Company (positioned after "Hiring Company (Lessee):")
+        $pdf->SetXY(20, 92); // Adjust Y coordinate
+        $pdf->Write(0, $hiringCompany);
+
+        // Add Effective Period (positioned after "Effective Period:")
+        $pdf->SetXY(20, 142); // Adjust Y coordinate
+        $pdf->Write(0, $effectivePeriod);
+
+        // Return PDF as string
+        return $pdf->Output('S');
+    }
 }

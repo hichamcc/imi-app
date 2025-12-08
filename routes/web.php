@@ -83,6 +83,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::get('drivers/{driver}/declarations', [DriverController::class, 'getDeclarations'])->name('drivers.declarations');
     Route::post('drivers/send-declarations', [DriverController::class, 'sendDeclarations'])->name('drivers.send-declarations');
     Route::post('drivers/{driver}/clone', [DriverController::class, 'clone'])->name('drivers.clone');
+    Route::get('drivers/{driver}/download-certificate', [DriverController::class, 'downloadCertificate'])->name('drivers.download-certificate');
 
     // Declaration Management Routes
     Route::resource('declarations', DeclarationController::class);
