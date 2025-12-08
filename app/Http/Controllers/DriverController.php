@@ -488,6 +488,7 @@ class DriverController extends Controller
 
     /**
      * Calculate effective period from declarations
+     * Gets the period from the last submitted declaration
      */
     private function calculateEffectivePeriod(array $declarations): string
     {
@@ -498,33 +499,32 @@ class DriverController extends Controller
             return $startDate . ' - ' . $endDate;
         }
 
-        $startDates = [];
-        $endDates = [];
+        // Filter only SUBMITTED declarations
+        $submittedDeclarations = array_filter($declarations, function($declaration) {
+            return isset($declaration['declarationStatus']) && $declaration['declarationStatus'] === 'SUBMITTED';
+        });
 
-        foreach ($declarations as $declaration) {
-            if (isset($declaration['declarationStartDate'])) {
-                $startDates[] = $declaration['declarationStartDate'];
-            }
-            if (isset($declaration['declarationEndDate'])) {
-                $endDates[] = $declaration['declarationEndDate'];
-            }
-        }
-
-        if (empty($startDates) || empty($endDates)) {
-            // Default to 6 months from today
+        if (empty($submittedDeclarations)) {
+            // Default to 6 months from today if no submitted declarations
             $startDate = date('Y-m-d');
             $endDate = date('Y-m-d', strtotime('+6 months'));
             return $startDate . ' - ' . $endDate;
         }
 
-        // Get the earliest start date and latest end date
-        sort($startDates);
-        rsort($endDates);
+        // Sort by start date to get the most recent submitted declaration
+        usort($submittedDeclarations, function($a, $b) {
+            $dateA = $a['declarationStartDate'] ?? '0000-00-00';
+            $dateB = $b['declarationStartDate'] ?? '0000-00-00';
+            return strcmp($dateB, $dateA); // Descending order (newest first)
+        });
 
-        $earliestStart = $startDates[0];
-        $latestEnd = $endDates[0];
+        // Get the last (most recent) submitted declaration
+        $lastSubmittedDeclaration = $submittedDeclarations[0];
 
-        return $earliestStart . ' - ' . $latestEnd;
+        $startDate = $lastSubmittedDeclaration['declarationStartDate'] ?? date('Y-m-d');
+        $endDate = $lastSubmittedDeclaration['declarationEndDate'] ?? date('Y-m-d', strtotime('+6 months'));
+
+        return $startDate . ' - ' . $endDate;
     }
 
     /**
