@@ -567,19 +567,19 @@ class DriverController extends Controller
             $pdf->SetTextColor(0, 0, 0);
 
             // Add Leased Employee (positioned after "Leased Employee:")
-            $pdf->SetXY(20, 52); // Adjust X,Y coordinates as needed
+            $pdf->SetXY(20, 50); // Adjust X,Y coordinates as needed
             $pdf->Write(0, $leasedEmployee);
 
             // Add Leasing Company (positioned after "Leasing Company:")
-            $pdf->SetXY(20, 72); // Adjust Y coordinate
+            $pdf->SetXY(20, 70); // Adjust Y coordinate
             $pdf->Write(0, $leasingCompany);
 
             // Add Hiring Company (positioned after "Hiring Company (Lessee):")
-            $pdf->SetXY(20, 92); // Adjust Y coordinate
+            $pdf->SetXY(20, 90); // Adjust Y coordinate
             $pdf->Write(0, $hiringCompany);
 
             // Add Effective Period (positioned after "Effective Period:")
-            $pdf->SetXY(20, 142); // Adjust Y coordinate
+            $pdf->SetXY(20, 144); // Adjust Y coordinate
             $pdf->Write(0, $effectivePeriod);
 
             // Return PDF as string
