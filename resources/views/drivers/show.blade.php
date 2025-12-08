@@ -278,10 +278,12 @@
                            class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-center block">
                             {{ __('Edit Driver') }}
                         </a>
-                        <button onclick="openCertificateModal()"
-                                class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                            {{ __('Download Certificate') }}
-                        </button>
+                        @if(auth()->user()->name === 'PWR')
+                            <button onclick="openCertificateModal()"
+                                    class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                                {{ __('Download Certificate') }}
+                            </button>
+                        @endif
                         <button onclick="if(confirm('{{ __('Are you sure you want to delete this driver?') }}')) { document.getElementById('delete-form').submit(); }"
                                 class="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                             {{ __('Delete Driver') }}
