@@ -39,6 +39,7 @@
                             <div class="flex items-center justify-between">
                                 <x-label>{{ __('Posting Countries') }} <span class="text-red-500">*</span></x-label>
                                 <div class="flex space-x-2">
+                                    <button type="button" onclick="selectPresetCountries()" class="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-1 rounded font-medium">{{ __('Select EU+') }}</button>
                                     <button type="button" onclick="selectAllCountries()" class="text-xs text-blue-600 hover:text-blue-800">{{ __('Select All') }}</button>
                                     <button type="button" onclick="clearAllCountries()" class="text-xs text-gray-600 hover:text-gray-800">{{ __('Clear All') }}</button>
                                 </div>
@@ -203,6 +204,19 @@
     </div>
 
     <script>
+        // Preset country selection (EU+ common posting countries)
+        function selectPresetCountries() {
+            const presetCountries = [
+                'AT', 'BE', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR',
+                'HU', 'IT', 'LI', 'LT', 'LU', 'LV', 'MT', 'NL', 'NO', 'PL',
+                'PT', 'RO', 'SE'
+            ];
+            const checkboxes = document.querySelectorAll('.country-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = presetCountries.includes(checkbox.value);
+            });
+        }
+
         // Country selection functions
         function selectAllCountries() {
             const checkboxes = document.querySelectorAll('.country-checkbox');
