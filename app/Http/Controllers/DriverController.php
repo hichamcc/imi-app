@@ -337,6 +337,217 @@ class DriverController extends Controller
     }
 
     /**
+     * Bulk clone multiple drivers (with their SUBMITTED declarations) to target organizations
+     */
+    public function bulkClone(Request $request)
+    {
+        $request->validate([
+            'driver_ids' => 'required|array|min:1',
+            'driver_ids.*' => 'string',
+            'target_user_ids' => 'required|array|min:1',
+            'target_user_ids.*' => 'exists:users,id',
+        ]);
+
+        $driverIds = $request->driver_ids;
+        $targetUserIds = $request->target_user_ids;
+
+        // Validate all target users upfront
+        $targetUsers = [];
+        foreach ($targetUserIds as $targetUserId) {
+            $targetUser = \App\Models\User::findOrFail($targetUserId);
+            if (!auth()->user()->canImpersonateUser($targetUser)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "You do not have access to organization: {$targetUser->name}"
+                ], 403);
+            }
+            $targetUsers[$targetUserId] = $targetUser;
+        }
+
+        $apiService = app(\App\Services\PostingApiService::class);
+        $sourceUser = auth()->user();
+        $results = [];
+
+        foreach ($driverIds as $driverId) {
+            foreach ($targetUsers as $targetUser) {
+                $resultKey = "{$driverId}__{$targetUser->id}";
+                try {
+                    // Switch to source credentials
+                    $apiService->setUserCredentials(
+                        $sourceUser->api_base_url,
+                        $sourceUser->api_key,
+                        $sourceUser->api_operator_id
+                    );
+
+                    // 1. Fetch source driver
+                    $sourceDriver = $this->driverService->getDriver($driverId);
+                    $driverName = trim(($sourceDriver['driverLatinFirstName'] ?? '') . ' ' . ($sourceDriver['driverLatinLastName'] ?? ''));
+
+                    // 2. Prepare clone data
+                    $cloneData = [
+                        'driverLatinFirstName' => $sourceDriver['driverLatinFirstName'],
+                        'driverLatinLastName' => $sourceDriver['driverLatinLastName'],
+                        'driverDateOfBirth' => $sourceDriver['driverDateOfBirth'],
+                        'driverLicenseNumber' => $sourceDriver['driverLicenseNumber'],
+                        'driverDocumentType' => $sourceDriver['driverDocumentType'],
+                        'driverDocumentNumber' => $sourceDriver['driverDocumentNumber'],
+                        'driverDocumentIssuingCountry' => $sourceDriver['driverDocumentIssuingCountry'],
+                        'driverAddressStreet' => $sourceDriver['driverAddressStreet'],
+                        'driverAddressPostCode' => $sourceDriver['driverAddressPostCode'],
+                        'driverAddressCity' => $sourceDriver['driverAddressCity'],
+                        'driverAddressCountry' => $sourceDriver['driverAddressCountry'],
+                        'driverContractStartDate' => $sourceDriver['driverContractStartDate'],
+                        'driverApplicableLaw' => $sourceDriver['driverApplicableLaw'],
+                    ];
+
+                    // 3. Fetch source driver's declarations (still using source credentials)
+                    $sourceDeclarations = $this->getDriverDeclarations($sourceDriver);
+                    $submittedDeclarations = array_filter($sourceDeclarations, function ($d) {
+                        return ($d['declarationStatus'] ?? '') === 'SUBMITTED';
+                    });
+
+                    // 4. Fetch full declaration details for each submitted declaration (source credentials)
+                    $fullDeclarations = [];
+                    foreach ($submittedDeclarations as $decl) {
+                        try {
+                            $fullDecl = $this->declarationService->getDeclaration($decl['declarationId']);
+                            $fullDeclarations[] = $fullDecl;
+                        } catch (\Exception $e) {
+                            \Log::warning('Bulk clone: Failed to fetch declaration', [
+                                'declaration_id' => $decl['declarationId'],
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    }
+
+                    // 5. Switch to target credentials
+                    $apiService->setUserCredentials(
+                        $targetUser->api_base_url,
+                        $targetUser->api_key,
+                        $targetUser->api_operator_id
+                    );
+
+                    // 6. Create driver in target org
+                    $newDriver = $apiService->post(config('posting.endpoints.drivers'), $cloneData);
+
+                    if (!isset($newDriver['driverId'])) {
+                        throw new \Exception('No driver ID returned from target org.');
+                    }
+
+                    $newDriverId = $newDriver['driverId'];
+
+                    // 7. Copy DriverProfile
+                    $sourceProfile = \App\Models\DriverProfile::where('driver_id', $driverId)->first();
+                    if ($sourceProfile) {
+                        \App\Models\DriverProfile::create([
+                            'driver_id' => $newDriverId,
+                            'email' => $sourceProfile->email,
+                            'auto_renew' => $sourceProfile->auto_renew,
+                        ]);
+                    }
+
+                    // 8. Create and submit declarations in target org
+                    $declResults = [];
+                    foreach ($fullDeclarations as $fullDecl) {
+                        try {
+                            $declData = [
+                                'driverId' => $newDriverId,
+                                'declarationPostingCountry' => $fullDecl['declarationPostingCountry'] ?? null,
+                                'declarationStartDate' => $fullDecl['declarationStartDate'] ?? null,
+                                'declarationEndDate' => $fullDecl['declarationEndDate'] ?? null,
+                                'declarationOperationType' => $fullDecl['declarationOperationType'] ?? [],
+                                'declarationTransportType' => $fullDecl['declarationTransportType'] ?? [],
+                                'declarationVehiclePlateNumber' => $fullDecl['declarationVehiclePlateNumber'] ?? [],
+                            ];
+
+                            // Copy otherContact fields if present
+                            foreach (['otherContactAsTransportManager', 'otherContactFirstName', 'otherContactLastName', 'otherContactEmail', 'otherContactPhone'] as $field) {
+                                if (isset($fullDecl[$field])) {
+                                    $declData[$field] = $fullDecl[$field];
+                                }
+                            }
+
+                            $newDecl = $this->declarationService->createDeclaration($declData);
+
+                            if (isset($newDecl['declarationId'])) {
+                                // Auto-submit
+                                $this->declarationService->submitDeclaration($newDecl['declarationId']);
+                                $declResults[] = [
+                                    'source_id' => $fullDecl['declarationId'] ?? 'unknown',
+                                    'new_id' => $newDecl['declarationId'],
+                                    'country' => $fullDecl['declarationPostingCountry'] ?? 'unknown',
+                                    'success' => true,
+                                ];
+                            } else {
+                                $declResults[] = [
+                                    'source_id' => $fullDecl['declarationId'] ?? 'unknown',
+                                    'success' => false,
+                                    'error' => 'No declaration ID returned',
+                                ];
+                            }
+                        } catch (\Exception $e) {
+                            $declResults[] = [
+                                'source_id' => $fullDecl['declarationId'] ?? 'unknown',
+                                'success' => false,
+                                'error' => $e->getMessage(),
+                            ];
+                        }
+                    }
+
+                    $results[$resultKey] = [
+                        'success' => true,
+                        'driver_id' => $driverId,
+                        'driver_name' => $driverName,
+                        'target_org' => $targetUser->name,
+                        'new_driver_id' => $newDriverId,
+                        'declarations_cloned' => count(array_filter($declResults, fn($r) => $r['success'])),
+                        'declarations_failed' => count(array_filter($declResults, fn($r) => !$r['success'])),
+                        'declaration_details' => $declResults,
+                    ];
+
+                    \Log::info('Bulk clone: Driver cloned successfully', [
+                        'source_driver_id' => $driverId,
+                        'new_driver_id' => $newDriverId,
+                        'target_user_id' => $targetUser->id,
+                        'declarations_cloned' => count(array_filter($declResults, fn($r) => $r['success'])),
+                    ]);
+
+                } catch (\Exception $e) {
+                    $results[$resultKey] = [
+                        'success' => false,
+                        'driver_id' => $driverId,
+                        'driver_name' => $driverName ?? $driverId,
+                        'target_org' => $targetUser->name,
+                        'error' => $e->getMessage(),
+                    ];
+
+                    \Log::error('Bulk clone: Failed', [
+                        'driver_id' => $driverId,
+                        'target_user_id' => $targetUser->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        // Switch back to source credentials
+        $apiService->setUserCredentials(
+            $sourceUser->api_base_url,
+            $sourceUser->api_key,
+            $sourceUser->api_operator_id
+        );
+
+        $successCount = count(array_filter($results, fn($r) => $r['success']));
+        $failCount = count($results) - $successCount;
+
+        return response()->json([
+            'success' => $successCount > 0,
+            'message' => "{$successCount} driver(s) cloned successfully, {$failCount} failed",
+            'results' => array_values($results),
+        ]);
+    }
+
+    /**
      * Clone a driver to another organization
      */
     public function clone(Request $request, string $sourceDriverId)

@@ -6,9 +6,14 @@
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ __('Drivers') }}</h1>
                 <p class="text-gray-600 dark:text-gray-400">{{ __('Manage your transport drivers') }}</p>
             </div>
-            <a href="{{ route('drivers.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                {{ __('Add Driver') }}
-            </a>
+            <div class="flex items-center space-x-3">
+                <button id="bulkCloneBtn" onclick="openBulkCloneModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors hidden">
+                    {{ __('Bulk Clone') }} (<span id="bulkCloneCount">0</span>)
+                </button>
+                <a href="{{ route('drivers.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    {{ __('Add Driver') }}
+                </a>
+            </div>
         </div>
 
         <!-- Search and Filters -->
@@ -59,6 +64,9 @@
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                         <thead class="bg-gray-50 dark:bg-gray-900">
                             <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <input type="checkbox" id="selectAllDrivers" onchange="toggleSelectAllDrivers()" class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                                </th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     {{ __('Name') }}
                                 </th>
@@ -88,6 +96,13 @@
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                             @foreach($drivers['items'] as $driver)
                                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                    <td class="px-4 py-4 whitespace-nowrap">
+                                        <input type="checkbox"
+                                               class="driver-checkbox h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                               value="{{ $driver['driverId'] }}"
+                                               data-driver-name="{{ addslashes($driver['driverFullName'] ?? (($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''))) }}"
+                                               onchange="updateBulkCloneCount()">
+                                    </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="flex items-center">
                                             <div class="flex-shrink-0 h-10 w-10">
@@ -300,6 +315,93 @@
                     </div>
                 </div>
             @endif
+        </div>
+    </div>
+
+    <!-- Bulk Clone Modal -->
+    <div id="bulkCloneModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-[700px] shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+                        {{ __('Bulk Clone Drivers & Declarations') }}
+                    </h3>
+                    <button onclick="closeBulkCloneModal()" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="mb-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-purple-800 dark:text-purple-200">
+                                <strong id="bulkCloneSelectedCount">0</strong> {{ __('driver(s) selected') }}
+                            </p>
+                            <p class="text-sm text-purple-700 dark:text-purple-300 mt-1">
+                                {{ __('Each driver and their SUBMITTED declarations will be cloned to the selected organizations. Cloned declarations will be auto-submitted.') }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <div id="bulkCloneDriverList" class="max-h-32 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-md p-2 space-y-1 mb-4">
+                        <!-- Selected drivers will be listed here -->
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {{ __('Target Organizations') }}
+                        </label>
+                        <div class="flex space-x-2">
+                            <button type="button" onclick="selectAllBulkOrgs()" class="text-sm text-purple-600 hover:text-purple-800 dark:text-purple-400">
+                                {{ __('Select All') }}
+                            </button>
+                            <button type="button" onclick="clearAllBulkOrgs()" class="text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400">
+                                {{ __('Clear All') }}
+                            </button>
+                        </div>
+                    </div>
+                    <div id="bulkOrgsLoading" class="text-center py-4">
+                        <div class="inline-flex items-center">
+                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {{ __('Loading organizations...') }}
+                        </div>
+                    </div>
+                    <div id="bulkOrgsList" class="hidden max-h-48 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2 space-y-2">
+                    </div>
+                    <div id="bulkOrgsError" class="hidden text-sm text-red-600 dark:text-red-400 mt-2"></div>
+                </div>
+
+                <div id="bulkCloneProgress" class="hidden mb-4">
+                    <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {{ __('Cloning Progress') }}:
+                    </div>
+                    <div id="bulkProgressList" class="space-y-2 max-h-64 overflow-y-auto">
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3">
+                    <button onclick="closeBulkCloneModal()" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-400 dark:hover:bg-gray-500">
+                        {{ __('Cancel') }}
+                    </button>
+                    <button onclick="bulkCloneDrivers()" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700" id="bulkCloneButton">
+                        {{ __('Clone Drivers & Declarations') }}
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -766,6 +868,239 @@
         document.getElementById('emailModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeEmailModal();
+            }
+        });
+
+        // =============================================
+        // Bulk Clone Functions
+        // =============================================
+        let bulkImpersonatableUsers = [];
+
+        function toggleSelectAllDrivers() {
+            const selectAll = document.getElementById('selectAllDrivers');
+            const checkboxes = document.querySelectorAll('.driver-checkbox');
+            checkboxes.forEach(cb => { cb.checked = selectAll.checked; });
+            updateBulkCloneCount();
+        }
+
+        function updateBulkCloneCount() {
+            const checked = document.querySelectorAll('.driver-checkbox:checked');
+            const count = checked.length;
+            const btn = document.getElementById('bulkCloneBtn');
+            const countSpan = document.getElementById('bulkCloneCount');
+            countSpan.textContent = count;
+            if (count > 0) {
+                btn.classList.remove('hidden');
+            } else {
+                btn.classList.add('hidden');
+            }
+        }
+
+        function getSelectedDrivers() {
+            const checked = document.querySelectorAll('.driver-checkbox:checked');
+            return Array.from(checked).map(cb => ({
+                id: cb.value,
+                name: cb.dataset.driverName
+            }));
+        }
+
+        function openBulkCloneModal() {
+            const selectedDrivers = getSelectedDrivers();
+            if (selectedDrivers.length === 0) {
+                alert('{{ __("Please select at least one driver.") }}');
+                return;
+            }
+
+            // Show modal
+            document.getElementById('bulkCloneModal').classList.remove('hidden');
+            document.getElementById('bulkCloneProgress').classList.add('hidden');
+            document.getElementById('bulkProgressList').innerHTML = '';
+            document.getElementById('bulkCloneSelectedCount').textContent = selectedDrivers.length;
+
+            // Show selected drivers list
+            const driverListDiv = document.getElementById('bulkCloneDriverList');
+            driverListDiv.innerHTML = selectedDrivers.map(d =>
+                `<div class="text-sm text-gray-700 dark:text-gray-300 py-1 px-2 bg-gray-50 dark:bg-gray-700 rounded">${d.name} <span class="text-xs text-gray-400">(${d.id.substring(0, 8)}...)</span></div>`
+            ).join('');
+
+            // Load orgs
+            loadBulkOrgs();
+        }
+
+        function closeBulkCloneModal() {
+            document.getElementById('bulkCloneModal').classList.add('hidden');
+        }
+
+        function loadBulkOrgs() {
+            const loadingDiv = document.getElementById('bulkOrgsLoading');
+            const listDiv = document.getElementById('bulkOrgsList');
+            const errorDiv = document.getElementById('bulkOrgsError');
+
+            loadingDiv.classList.remove('hidden');
+            listDiv.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+
+            fetch('/api/impersonatable-users', {
+                method: 'GET',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadingDiv.classList.add('hidden');
+                if (data.success && data.users && data.users.length > 0) {
+                    bulkImpersonatableUsers = data.users;
+                    listDiv.innerHTML = '';
+                    data.users.forEach(user => {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center p-2 border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700';
+                        div.innerHTML = `
+                            <input type="checkbox" id="bulk_org_${user.id}" value="${user.id}"
+                                   class="bulk-org-checkbox mr-3 h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                            <label for="bulk_org_${user.id}" class="flex-1 cursor-pointer text-sm text-gray-900 dark:text-white">
+                                <div class="font-medium">${user.name}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">${user.email}</div>
+                            </label>
+                        `;
+                        listDiv.appendChild(div);
+                    });
+                    listDiv.classList.remove('hidden');
+                } else {
+                    errorDiv.textContent = '{{ __("No target organizations available.") }}';
+                    errorDiv.classList.remove('hidden');
+                }
+            })
+            .catch(error => {
+                loadingDiv.classList.add('hidden');
+                errorDiv.textContent = '{{ __("Failed to load organizations.") }}';
+                errorDiv.classList.remove('hidden');
+            });
+        }
+
+        function selectAllBulkOrgs() {
+            document.querySelectorAll('.bulk-org-checkbox').forEach(cb => { cb.checked = true; });
+        }
+
+        function clearAllBulkOrgs() {
+            document.querySelectorAll('.bulk-org-checkbox').forEach(cb => { cb.checked = false; });
+        }
+
+        async function bulkCloneDrivers() {
+            const selectedDrivers = getSelectedDrivers();
+            const selectedOrgCheckboxes = document.querySelectorAll('.bulk-org-checkbox:checked');
+            const selectedOrgIds = Array.from(selectedOrgCheckboxes).map(cb => cb.value);
+
+            if (selectedDrivers.length === 0) {
+                alert('{{ __("Please select at least one driver.") }}');
+                return;
+            }
+            if (selectedOrgIds.length === 0) {
+                alert('{{ __("Please select at least one target organization.") }}');
+                return;
+            }
+
+            const totalOps = selectedDrivers.length * selectedOrgIds.length;
+            if (!confirm(`{{ __("This will clone") }} ${selectedDrivers.length} {{ __("driver(s) with their SUBMITTED declarations to") }} ${selectedOrgIds.length} {{ __("organization(s)") }} (${totalOps} {{ __("operations") }}). {{ __("Continue?") }}`)) {
+                return;
+            }
+
+            const cloneButton = document.getElementById('bulkCloneButton');
+            cloneButton.textContent = '{{ __("Cloning...") }}';
+            cloneButton.disabled = true;
+
+            // Show progress
+            document.getElementById('bulkCloneProgress').classList.remove('hidden');
+            const progressList = document.getElementById('bulkProgressList');
+            progressList.innerHTML = '';
+
+            // Create progress entries for each driver x org
+            selectedDrivers.forEach(driver => {
+                selectedOrgIds.forEach(orgId => {
+                    const orgName = bulkImpersonatableUsers.find(u => u.id == orgId)?.name || 'Unknown';
+                    const key = `${driver.id}__${orgId}`;
+                    const div = document.createElement('div');
+                    div.id = `bulk_progress_${key}`;
+                    div.className = 'flex items-center p-2 border border-gray-200 dark:border-gray-600 rounded text-sm';
+                    div.innerHTML = `
+                        <div class="flex-shrink-0">
+                            <svg class="animate-spin h-4 w-4 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                        <div class="ml-3 flex-1">
+                            <span class="font-medium">${driver.name}</span> → <span>${orgName}</span>
+                            <div class="text-xs text-gray-500">{{ __("Waiting...") }}</div>
+                        </div>
+                    `;
+                    progressList.appendChild(div);
+                });
+            });
+
+            try {
+                const response = await fetch('{{ route("drivers.bulk-clone") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({
+                        driver_ids: selectedDrivers.map(d => d.id),
+                        target_user_ids: selectedOrgIds
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.results) {
+                    data.results.forEach(result => {
+                        const key = `${result.driver_id}__${bulkImpersonatableUsers.find(u => u.name === result.target_org)?.id || ''}`;
+                        const div = document.getElementById(`bulk_progress_${key}`);
+                        if (!div) return;
+
+                        if (result.success) {
+                            const declInfo = result.declarations_cloned > 0
+                                ? `${result.declarations_cloned} declaration(s) cloned` + (result.declarations_failed > 0 ? `, ${result.declarations_failed} failed` : '')
+                                : 'No declarations to clone';
+                            div.innerHTML = `
+                                <div class="flex-shrink-0">
+                                    <svg class="h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                </div>
+                                <div class="ml-3 flex-1">
+                                    <span class="font-medium">${result.driver_name}</span> → <span>${result.target_org}</span>
+                                    <div class="text-xs text-green-600 dark:text-green-400">{{ __("Success") }} - ${declInfo} (ID: ${result.new_driver_id?.substring(0, 8)}...)</div>
+                                </div>
+                            `;
+                        } else {
+                            div.innerHTML = `
+                                <div class="flex-shrink-0">
+                                    <svg class="h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </div>
+                                <div class="ml-3 flex-1">
+                                    <span class="font-medium">${result.driver_name}</span> → <span>${result.target_org}</span>
+                                    <div class="text-xs text-red-600 dark:text-red-400">${result.error || '{{ __("Failed") }}'}</div>
+                                </div>
+                            `;
+                        }
+                    });
+                }
+
+                showMessage(data.message || '{{ __("Bulk clone completed") }}', data.success ? 'success' : 'error');
+
+            } catch (error) {
+                console.error('Bulk clone error:', error);
+                showMessage('{{ __("Bulk clone failed. Please try again.") }}', 'error');
+            } finally {
+                cloneButton.textContent = '{{ __("Clone Drivers & Declarations") }}';
+                cloneButton.disabled = false;
+            }
+        }
+
+        // Close bulk clone modal when clicking outside
+        document.getElementById('bulkCloneModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeBulkCloneModal();
             }
         });
 

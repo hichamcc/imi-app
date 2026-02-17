@@ -79,6 +79,7 @@ Route::middleware(['auth'])->group(function () {
 
 Route::middleware(['auth', 'api.credentials'])->group(function () {
     // Driver Management Routes
+    Route::post('drivers/bulk-clone', [DriverController::class, 'bulkClone'])->name('drivers.bulk-clone');
     Route::resource('drivers', DriverController::class);
     Route::get('drivers/{driver}/declarations', [DriverController::class, 'getDeclarations'])->name('drivers.declarations');
     Route::post('drivers/send-declarations', [DriverController::class, 'sendDeclarations'])->name('drivers.send-declarations');
