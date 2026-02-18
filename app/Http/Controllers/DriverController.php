@@ -472,6 +472,21 @@ class DriverController extends Controller
                             if (isset($newDecl['declarationId'])) {
                                 // Auto-submit
                                 $this->declarationService->submitDeclaration($newDecl['declarationId']);
+
+                                // Send email to driver if they have an email
+                                $driverEmail = \App\Models\DriverProfile::getDriverEmail($newDriverId);
+                                if ($driverEmail) {
+                                    try {
+                                        $this->declarationService->emailDeclaration($newDecl['declarationId'], $driverEmail, 'en');
+                                    } catch (\Exception $emailEx) {
+                                        \Log::warning('Bulk clone: Failed to send declaration email', [
+                                            'declaration_id' => $newDecl['declarationId'],
+                                            'driver_email' => $driverEmail,
+                                            'error' => $emailEx->getMessage(),
+                                        ]);
+                                    }
+                                }
+
                                 $declResults[] = [
                                     'source_id' => $fullDecl['declarationId'] ?? 'unknown',
                                     'new_id' => $newDecl['declarationId'],

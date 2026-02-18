@@ -373,6 +373,10 @@ class DeclarationController extends Controller
             }
 
             $this->declarationService->submitDeclaration($id);
+
+            // Send email to driver if they have an email
+            $this->sendDeclarationEmailIfDriverHasEmail($id, $declaration);
+
             return redirect()->route('declarations.show', $id)
                 ->with('success', 'Declaration submitted successfully!');
         } catch (\Exception $e) {
@@ -467,6 +471,37 @@ class DeclarationController extends Controller
                 'success' => false,
                 'message' => 'Failed to send email: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Send declaration email to driver if they have an email in DriverProfile
+     */
+    private function sendDeclarationEmailIfDriverHasEmail(string $declarationId, array $declaration): void
+    {
+        try {
+            $driverId = $declaration['driverId'] ?? null;
+            if (!$driverId) {
+                return;
+            }
+
+            $driverEmail = \App\Models\DriverProfile::getDriverEmail($driverId);
+            if (!$driverEmail) {
+                return;
+            }
+
+            $this->declarationService->emailDeclaration($declarationId, $driverEmail, 'en');
+
+            \Log::info('Declaration email auto-sent after submit', [
+                'declaration_id' => $declarationId,
+                'driver_id' => $driverId,
+                'driver_email' => $driverEmail,
+            ]);
+        } catch (\Exception $e) {
+            \Log::warning('Failed to auto-send declaration email after submit', [
+                'declaration_id' => $declarationId,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
