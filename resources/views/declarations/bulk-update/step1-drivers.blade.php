@@ -84,6 +84,9 @@
                             />
                         </div>
                         <div class="flex space-x-2">
+                            <button type="button" id="select-active-drivers" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                                {{ __('Select Active') }}
+                            </button>
                             <button type="button" id="select-all-drivers" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors">
                                 {{ __('Select All') }}
                             </button>
@@ -173,6 +176,7 @@
             const totalDeclarationsElement = document.getElementById('total-declarations-count');
             const searchInput = document.getElementById('driver-search');
             const selectAllButton = document.getElementById('select-all-drivers');
+            const selectActiveButton = document.getElementById('select-active-drivers');
             const clearAllButton = document.getElementById('clear-all-drivers');
 
             function updateStats() {
@@ -208,6 +212,17 @@
             });
 
             searchInput.addEventListener('input', filterDrivers);
+
+            selectActiveButton.addEventListener('click', function() {
+                const visibleCheckboxes = Array.from(checkboxes).filter(cb =>
+                    cb.closest('.driver-item').style.display !== 'none'
+                );
+                visibleCheckboxes.forEach(checkbox => {
+                    const count = parseInt(checkbox.dataset.submittedCount) || 0;
+                    checkbox.checked = count > 0;
+                });
+                updateStats();
+            });
 
             selectAllButton.addEventListener('click', function() {
                 const visibleCheckboxes = Array.from(checkboxes).filter(cb =>
