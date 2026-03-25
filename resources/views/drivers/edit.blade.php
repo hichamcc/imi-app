@@ -118,7 +118,7 @@
                                 @php
                                     $currentCountry = old('driverDocumentIssuingCountry', $driver['driverDocumentIssuingCountry'] ?? '');
                                     $countries = [
-                                        'AT' => 'Austria', 'BY' => 'Belarus', 'BE' => 'Belgium', 'BG' => 'Bulgaria', 'HR' => 'Croatia',
+                                        'AM' => 'Armenia', 'AT' => 'Austria', 'BY' => 'Belarus', 'BE' => 'Belgium', 'BG' => 'Bulgaria', 'HR' => 'Croatia',
                                         'CY' => 'Cyprus', 'CZ' => 'Czech Republic', 'DK' => 'Denmark', 'EE' => 'Estonia',
                                         'FI' => 'Finland', 'FR' => 'France', 'DE' => 'Germany', 'GR' => 'Greece',
                                         'HU' => 'Hungary', 'IN' => 'India', 'IE' => 'Ireland', 'IT' => 'Italy', 'LV' => 'Latvia',
