@@ -26,6 +26,7 @@ class User extends Authenticatable
         'api_key',
         'api_operator_id',
         'api_base_url',
+        'applicable_law',
         'is_admin',
         'is_active',
     ];

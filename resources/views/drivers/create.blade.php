@@ -210,7 +210,7 @@
                             <x-select name="driverApplicableLaw" id="driverApplicableLaw" required>
                                 <option value="">{{ __('Select Country') }}</option>
                                 @foreach($countries as $code => $name)
-                                    <option value="{{ $code }}" {{ old('driverApplicableLaw') == $code ? 'selected' : '' }}>
+                                    <option value="{{ $code }}" {{ (old('driverApplicableLaw', $defaultApplicableLaw ?? '')) == $code ? 'selected' : '' }}>
                                         {{ __($name) }}
                                     </option>
                                 @endforeach

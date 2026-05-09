@@ -36,6 +36,7 @@ class ProfileController extends Controller
             'api_key' => ['nullable', 'string', 'max:255'],
             'api_operator_id' => ['nullable', 'string', 'max:255'],
             'api_base_url' => ['nullable', 'url', 'max:255'],
+            'applicable_law' => ['nullable', 'string', 'size:2'],
         ]);
 
         $user->fill($validated);

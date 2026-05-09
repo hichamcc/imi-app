@@ -3,6 +3,18 @@
     @include('partials.settings-heading')
 
     <x-settings.layout :heading="__('Profile')" :subheading="__('Update your name and email address')">
+        @php
+            $lawCountries = [
+                'AM' => 'Armenia', 'AT' => 'Austria', 'BY' => 'Belarus', 'BE' => 'Belgium', 'BG' => 'Bulgaria', 'HR' => 'Croatia',
+                'CY' => 'Cyprus', 'CZ' => 'Czech Republic', 'DK' => 'Denmark', 'EE' => 'Estonia',
+                'FI' => 'Finland', 'FR' => 'France', 'DE' => 'Germany', 'GR' => 'Greece',
+                'HU' => 'Hungary', 'IN' => 'India', 'IE' => 'Ireland', 'IT' => 'Italy', 'LV' => 'Latvia',
+                'LT' => 'Lithuania', 'LU' => 'Luxembourg', 'MT' => 'Malta', 'NL' => 'Netherlands',
+                'PH' => 'Philippines', 'PL' => 'Poland', 'PT' => 'Portugal', 'RO' => 'Romania', 'SK' => 'Slovakia',
+                'SI' => 'Slovenia', 'ES' => 'Spain', 'LK' => 'Sri Lanka', 'SE' => 'Sweden', 'UA' => 'Ukraine',
+                'ZW' => 'Zimbabwe',
+            ];
+        @endphp
         <x-form method="put" action="{{ route('settings.profile.update') }}" class="my-6 w-full space-y-6">
             <x-input type="text" :label="__('Name')" :value="$user->name" name="name" required autofocus autocomplete="name" />
 
@@ -26,6 +38,22 @@
                         @endif
                     </div>
                 @endif
+            </div>
+
+            <div>
+                <x-label for="applicable_law">{{ __('Applicable Law (Company Home Country)') }}</x-label>
+                <select name="applicable_law" id="applicable_law"
+                    class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <option value="">{{ __('— Not set —') }}</option>
+                    @foreach($lawCountries as $code => $name)
+                        <option value="{{ $code }}" {{ $user->applicable_law === $code ? 'selected' : '' }}>
+                            {{ $code }} — {{ $name }}
+                        </option>
+                    @endforeach
+                </select>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('This is applied automatically as the Applicable Law for all drivers and cloning operations in your company profile.') }}
+                </p>
             </div>
 
             <div class="flex items-center gap-4">

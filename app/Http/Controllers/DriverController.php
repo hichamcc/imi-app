@@ -64,7 +64,8 @@ class DriverController extends Controller
      */
     public function create()
     {
-        return view('drivers.create');
+        $defaultApplicableLaw = auth()->user()->applicable_law;
+        return view('drivers.create', compact('defaultApplicableLaw'));
     }
 
     /**
@@ -405,7 +406,7 @@ class DriverController extends Controller
                         'driverAddressCity' => $sourceDriver['driverAddressCity'],
                         'driverAddressCountry' => $sourceDriver['driverAddressCountry'],
                         'driverContractStartDate' => $sourceDriver['driverContractStartDate'],
-                        'driverApplicableLaw' => $sourceDriver['driverApplicableLaw'],
+                        'driverApplicableLaw' => $targetUser->applicable_law ?? $sourceDriver['driverApplicableLaw'],
                     ];
 
                     // 3. Fetch source driver's declarations (still using source credentials)
@@ -607,7 +608,7 @@ class DriverController extends Controller
                 'driverAddressCity' => $sourceDriver['driverAddressCity'],
                 'driverAddressCountry' => $sourceDriver['driverAddressCountry'],
                 'driverContractStartDate' => $sourceDriver['driverContractStartDate'],
-                'driverApplicableLaw' => $sourceDriver['driverApplicableLaw'],
+                'driverApplicableLaw' => $targetUser->applicable_law ?? $sourceDriver['driverApplicableLaw'],
             ];
 
             // 3. Get PostingApiService instance and switch to target user's credentials
