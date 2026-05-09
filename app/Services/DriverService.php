@@ -298,10 +298,12 @@ class DriverService
                 $driver['email'] = $profile->email;
                 $driver['has_email'] = !empty($profile->email);
                 $driver['auto_renew'] = $profile->auto_renew;
+                $driver['address_country'] = $profile->address_country;
             } else {
                 $driver['email'] = null;
                 $driver['has_email'] = false;
-                $driver['auto_renew'] = true; // Default true for drivers without profiles
+                $driver['auto_renew'] = true;
+                $driver['address_country'] = null;
             }
         }
 

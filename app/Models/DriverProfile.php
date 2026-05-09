@@ -11,6 +11,7 @@ class DriverProfile extends Model
         'driver_id',
         'email',
         'auto_renew',
+        'address_country',
     ];
 
     protected $casts = [

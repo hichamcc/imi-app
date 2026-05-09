@@ -90,6 +90,10 @@ class DriverController extends Controller
 
         try {
             $driver = $this->driverService->createDriver($validated);
+            \App\Models\DriverProfile::updateOrCreate(
+                ['driver_id' => $driver['driverId']],
+                ['address_country' => strtoupper($validated['driverAddressCountry'])]
+            );
             return redirect()->route('drivers.show', $driver['driverId'])->with('success', 'Driver created successfully!');
         } catch (\Exception $e) {
             return redirect()->back()->withInput()->with('error', 'Failed to create driver: ' . $e->getMessage());
@@ -152,6 +156,10 @@ class DriverController extends Controller
 
         try {
             $driver = $this->driverService->updateDriver($id, $validated);
+            \App\Models\DriverProfile::updateOrCreate(
+                ['driver_id' => $id],
+                ['address_country' => strtoupper($validated['driverAddressCountry'])]
+            );
             return redirect()->route('drivers.show', $id)->with('success', 'Driver updated successfully!');
         } catch (\Exception $e) {
             return redirect()->back()->withInput()->with('error', 'Failed to update driver: ' . $e->getMessage());
