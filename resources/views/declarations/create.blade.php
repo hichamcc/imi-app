@@ -26,7 +26,7 @@
                             <x-select name="driverId" id="driverId" required>
                                 <option value="">{{ __('Select Driver') }}</option>
                                 @foreach($drivers as $driver)
-                                    <option value="{{ $driver['driverId'] }}" {{ old('driverId') == $driver['driverId'] ? 'selected' : '' }}>
+                                    <option value="{{ $driver['driverId'] }}" {{ old('driverId', request('driverId')) == $driver['driverId'] ? 'selected' : '' }}>
                                         {{ trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')) }}
                                     </option>
                                 @endforeach
