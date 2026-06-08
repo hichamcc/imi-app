@@ -78,6 +78,48 @@
                     </div>
                 </div>
 
+                <!-- Vehicle Registration (RTPD API) -->
+                <div x-data="{ carriage: '{{ old('carriage_type', $truck->carriage_type ?? 'CARRIAGE_OF_GOODS') }}' }">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ __('Vehicle Registration (RTPD)') }}</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">{{ __('These fields are required for the new RTPD vehicle register and bulk Excel upload.') }}</p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label for="registration_country" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ __('Registration Country') }}</label>
+                            <select name="registration_country" id="registration_country" class="block w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-700 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                <option value="">{{ __('— Select —') }}</option>
+                                @foreach($registrationCountries as $code => $name)
+                                    <option value="{{ $code }}" {{ old('registration_country', $truck->registration_country) == $code ? 'selected' : '' }}>{{ $code }} — {{ __($name) }}</option>
+                                @endforeach
+                            </select>
+                            @error('registration_country')<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@enderror
+                        </div>
+                        <div>
+                            <label for="carriage_type" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ __('Carriage Type') }}</label>
+                            <select name="carriage_type" id="carriage_type" x-model="carriage" class="block w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-700 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                @foreach($carriageTypes as $key => $label)
+                                    <option value="{{ $key }}" {{ old('carriage_type', $truck->carriage_type) == $key ? 'selected' : '' }}>{{ __($label) }}</option>
+                                @endforeach
+                            </select>
+                            @error('carriage_type')<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@enderror
+                        </div>
+                        <div>
+                            <label for="weight_type" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ __('Weight Type') }}</label>
+                            <select name="weight_type" id="weight_type" :disabled="carriage === 'CARRIAGE_OF_PASSENGERS'" class="block w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-700 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50">
+                                <template x-if="carriage === 'CARRIAGE_OF_PASSENGERS'">
+                                    <option value="N/A" selected>{{ __('N/A (passengers)') }}</option>
+                                </template>
+                                <template x-if="carriage !== 'CARRIAGE_OF_PASSENGERS'">
+                                    <optgroup label="{{ __('Goods') }}">
+                                        <option value="HEAVY" {{ old('weight_type', $truck->weight_type ?: 'HEAVY') == 'HEAVY' ? 'selected' : '' }}>{{ __('Heavy') }}</option>
+                                        <option value="LIGHT" {{ old('weight_type', $truck->weight_type) == 'LIGHT' ? 'selected' : '' }}>{{ __('Light') }}</option>
+                                    </optgroup>
+                                </template>
+                            </select>
+                            @error('weight_type')<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@enderror
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Countries -->
                 <div>
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ __('Operating Countries') }}</h3>

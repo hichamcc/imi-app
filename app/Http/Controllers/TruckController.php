@@ -50,7 +50,10 @@ class TruckController extends Controller
     {
         $statuses = Truck::getStatuses();
         $countries = \App\Services\DeclarationService::getPostingCountries();
-        return view('trucks.create', compact('statuses', 'countries'));
+        $registrationCountries = Truck::getRegistrationCountries();
+        $carriageTypes = Truck::getCarriageTypes();
+        $weightTypes = Truck::getWeightTypes();
+        return view('trucks.create', compact('statuses', 'countries', 'registrationCountries', 'carriageTypes', 'weightTypes'));
     }
 
     /**
@@ -72,7 +75,12 @@ class TruckController extends Controller
             'status' => 'required|in:Available,In-Transit,Maintenance,Retired',
             'countries' => 'nullable|array',
             'countries.*' => 'in:' . implode(',', array_keys(\App\Services\DeclarationService::getPostingCountries())),
+            'registration_country' => ['nullable', Rule::in(array_keys(Truck::getRegistrationCountries()))],
+            'carriage_type' => ['nullable', Rule::in(array_keys(Truck::getCarriageTypes()))],
+            'weight_type' => ['nullable', Rule::in(array_keys(Truck::getWeightTypes()))],
         ]);
+
+        $validated['weight_type'] = $this->normalizeWeightType($validated['carriage_type'] ?? null, $validated['weight_type'] ?? Truck::WEIGHT_HEAVY);
 
         try {
             $truck = $this->truckService->createTruck($validated);
@@ -113,7 +121,10 @@ class TruckController extends Controller
             $truck = $this->truckService->getTruck($id);
             $statuses = Truck::getStatuses();
             $countries = \App\Services\DeclarationService::getPostingCountries();
-            return view('trucks.edit', compact('truck', 'statuses', 'countries'));
+            $registrationCountries = Truck::getRegistrationCountries();
+            $carriageTypes = Truck::getCarriageTypes();
+            $weightTypes = Truck::getWeightTypes();
+            return view('trucks.edit', compact('truck', 'statuses', 'countries', 'registrationCountries', 'carriageTypes', 'weightTypes'));
         } catch (\Exception $e) {
             return redirect()->route('trucks.index')
                 ->with('error', 'Failed to load truck: ' . $e->getMessage());
@@ -139,7 +150,12 @@ class TruckController extends Controller
             'status' => 'required|in:Available,In-Transit,Maintenance,Retired',
             'countries' => 'nullable|array',
             'countries.*' => 'in:' . implode(',', array_keys(\App\Services\DeclarationService::getPostingCountries())),
+            'registration_country' => ['nullable', Rule::in(array_keys(Truck::getRegistrationCountries()))],
+            'carriage_type' => ['nullable', Rule::in(array_keys(Truck::getCarriageTypes()))],
+            'weight_type' => ['nullable', Rule::in(array_keys(Truck::getWeightTypes()))],
         ]);
+
+        $validated['weight_type'] = $this->normalizeWeightType($validated['carriage_type'] ?? null, $validated['weight_type'] ?? Truck::WEIGHT_HEAVY);
 
         try {
             $truck = $this->truckService->updateTruck($id, $validated);
@@ -292,5 +308,115 @@ class TruckController extends Controller
             return redirect()->back()
                 ->with('error', 'Failed to process import: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Force weight_type = N/A when carriage_type is passengers (per provider spec).
+     */
+    private function normalizeWeightType(?string $carriageType, ?string $weightType): string
+    {
+        if ($carriageType === Truck::CARRIAGE_PASSENGERS) {
+            return Truck::WEIGHT_NA;
+        }
+        return in_array($weightType, [Truck::WEIGHT_LIGHT, Truck::WEIGHT_HEAVY], true)
+            ? $weightType
+            : Truck::WEIGHT_HEAVY;
+    }
+
+    /**
+     * Export the current user's trucks to the provider's Excel template format.
+     */
+    public function exportTemplate()
+    {
+        $trucks = Truck::where('user_id', auth()->id())->orderBy('plate')->get();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+
+        // Sheet 1: ReferenceData (mirrors the provider's template)
+        $ref = $spreadsheet->getActiveSheet();
+        $ref->setTitle('ReferenceData');
+        $ref->fromArray(['Registration country', 'Type of carriage', 'Vehicle weight'], null, 'A1');
+        $row = 2;
+        $countries = array_keys(Truck::getRegistrationCountries());
+        $carriages = [Truck::CARRIAGE_GOODS, Truck::CARRIAGE_PASSENGERS];
+        $weights = [Truck::WEIGHT_LIGHT, Truck::WEIGHT_HEAVY, Truck::WEIGHT_NA];
+        $maxRows = max(count($countries), count($carriages), count($weights));
+        for ($i = 0; $i < $maxRows; $i++) {
+            $ref->setCellValue("A" . ($row + $i), $countries[$i] ?? null);
+            $ref->setCellValue("B" . ($row + $i), $carriages[$i] ?? null);
+            $ref->setCellValue("C" . ($row + $i), $weights[$i] ?? null);
+        }
+
+        // Sheet 2: Template — actual fleet data, matching provider's column names exactly
+        $tpl = $spreadsheet->createSheet();
+        $tpl->setTitle('Template');
+        $tpl->fromArray([
+            'vehicle.registrationCountry',
+            'vehicle.carriageType',
+            'vehicle.weightType',
+            'vehicle.plateNumber',
+        ], null, 'A1');
+
+        $r = 2;
+        foreach ($trucks as $truck) {
+            $tpl->setCellValue("A{$r}", $truck->registration_country);
+            $tpl->setCellValue("B{$r}", $truck->carriage_type);
+            $tpl->setCellValue("C{$r}", $truck->weight_type);
+            $tpl->setCellValueExplicit("D{$r}", $truck->plate, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $r++;
+        }
+
+        $spreadsheet->setActiveSheetIndex(1);
+
+        $filename = 'fleet-upload-' . now()->format('Y-m-d') . '.xlsx';
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * Bulk update only the API-related vehicle fields on selected trucks.
+     */
+    public function bulkUpdateVehicleFields(Request $request)
+    {
+        $validated = $request->validate([
+            'truck_ids' => 'required|array|min:1',
+            'truck_ids.*' => 'integer|exists:trucks,id',
+            'registration_country' => ['nullable', Rule::in(array_keys(Truck::getRegistrationCountries()))],
+            'carriage_type' => ['nullable', Rule::in(array_keys(Truck::getCarriageTypes()))],
+            'weight_type' => ['nullable', Rule::in(array_keys(Truck::getWeightTypes()))],
+        ]);
+
+        $updates = array_filter([
+            'registration_country' => $validated['registration_country'] ?? null,
+            'carriage_type' => $validated['carriage_type'] ?? null,
+            'weight_type' => $validated['weight_type'] ?? null,
+        ], fn($v) => $v !== null && $v !== '');
+
+        if (empty($updates)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No fields selected to update.',
+            ], 422);
+        }
+
+        // If carriage_type=passengers is being applied, force weight_type=N/A
+        if (($updates['carriage_type'] ?? null) === Truck::CARRIAGE_PASSENGERS) {
+            $updates['weight_type'] = Truck::WEIGHT_NA;
+        }
+
+        $count = Truck::whereIn('id', $validated['truck_ids'])
+            ->where('user_id', auth()->id())
+            ->update($updates);
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$count} truck(s) updated.",
+            'updated' => $count,
+        ]);
     }
 }

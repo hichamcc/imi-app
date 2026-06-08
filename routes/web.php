@@ -100,6 +100,8 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::get('declarations/driver/{driver}/truck-plates', [DeclarationController::class, 'getDriverTruckPlates'])->name('declarations.driver-truck-plates');
 
     // Truck Management Routes
+    Route::get('trucks/export-template', [TruckController::class, 'exportTemplate'])->name('trucks.export-template');
+    Route::post('trucks/bulk-update-vehicle-fields', [TruckController::class, 'bulkUpdateVehicleFields'])->name('trucks.bulk-update-vehicle-fields');
     Route::resource('trucks', TruckController::class);
     Route::get('trucks-import', [TruckController::class, 'import'])->name('trucks.import');
     Route::post('trucks-import', [TruckController::class, 'processImport'])->name('trucks.process-import');

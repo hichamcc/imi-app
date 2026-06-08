@@ -15,12 +15,57 @@ class Truck extends Model
         'capacity_tons',
         'status',
         'countries',
+        'registration_country',
+        'carriage_type',
+        'weight_type',
+        'api_vehicle_id',
     ];
 
     protected $casts = [
         'capacity_tons' => 'decimal:2',
         'countries' => 'array',
     ];
+
+    public const CARRIAGE_GOODS = 'CARRIAGE_OF_GOODS';
+    public const CARRIAGE_PASSENGERS = 'CARRIAGE_OF_PASSENGERS';
+
+    public const WEIGHT_LIGHT = 'LIGHT';
+    public const WEIGHT_HEAVY = 'HEAVY';
+    public const WEIGHT_NA = 'N/A';
+
+    public static function getCarriageTypes(): array
+    {
+        return [
+            self::CARRIAGE_GOODS => 'Carriage of goods',
+            self::CARRIAGE_PASSENGERS => 'Carriage of passengers',
+        ];
+    }
+
+    public static function getWeightTypes(): array
+    {
+        return [
+            self::WEIGHT_LIGHT => 'Light',
+            self::WEIGHT_HEAVY => 'Heavy',
+            self::WEIGHT_NA => 'N/A',
+        ];
+    }
+
+    /**
+     * Country codes accepted by the RTPD vehicle register (from provider's Excel template).
+     */
+    public static function getRegistrationCountries(): array
+    {
+        return [
+            'AT' => 'Austria', 'BE' => 'Belgium', 'BG' => 'Bulgaria', 'HR' => 'Croatia',
+            'CY' => 'Cyprus', 'CZ' => 'Czech Republic', 'DK' => 'Denmark', 'EE' => 'Estonia',
+            'FI' => 'Finland', 'FR' => 'France', 'DE' => 'Germany', 'GR' => 'Greece',
+            'HU' => 'Hungary', 'IE' => 'Ireland', 'IT' => 'Italy', 'IS' => 'Iceland',
+            'LV' => 'Latvia', 'LI' => 'Liechtenstein', 'LT' => 'Lithuania', 'LU' => 'Luxembourg',
+            'MT' => 'Malta', 'NL' => 'Netherlands', 'NO' => 'Norway', 'PL' => 'Poland',
+            'PT' => 'Portugal', 'RO' => 'Romania', 'SK' => 'Slovakia', 'SI' => 'Slovenia',
+            'ES' => 'Spain', 'SE' => 'Sweden', 'GB' => 'United Kingdom',
+        ];
+    }
 
     public function user(): BelongsTo
     {
