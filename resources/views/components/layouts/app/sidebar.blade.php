@@ -44,6 +44,12 @@
                             {{ __('Bulk Update') }}
                         </x-navlist.item>
                     </x-navlist.group>
+
+                    <x-navlist.group :heading="__('HR')">
+                        <x-navlist.item before="phosphor-identification-card" :href="route('persons.index')" :current="request()->routeIs('persons.*')">
+                            {{ __('Persons') }}
+                        </x-navlist.item>
+                    </x-navlist.group>
                 @endif
 
             </x-navlist>

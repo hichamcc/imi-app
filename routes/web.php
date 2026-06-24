@@ -4,6 +4,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeclarationController;
 use App\Http\Controllers\DriverController;
 use App\Http\Controllers\DriverProfileController;
+use App\Http\Controllers\PersonController;
 use App\Http\Controllers\TruckController;
 use App\Http\Controllers\UserGroupController;
 use App\Http\Controllers\Settings;
@@ -107,6 +108,12 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::post('trucks-import', [TruckController::class, 'processImport'])->name('trucks.process-import');
     Route::post('trucks/{truck}/assign-driver', [TruckController::class, 'assignDriver'])->name('trucks.assign-driver');
     Route::delete('truck-assignments/{assignment}', [TruckController::class, 'unassignDriver'])->name('trucks.unassign-driver');
+
+    // HR — Person Routes
+    Route::post('persons/{person}/files', [PersonController::class, 'uploadFile'])->name('persons.files.upload');
+    Route::get('persons/{person}/files/{file}/download', [PersonController::class, 'downloadFile'])->name('persons.files.download');
+    Route::delete('persons/{person}/files/{file}', [PersonController::class, 'deleteFile'])->name('persons.files.destroy');
+    Route::resource('persons', PersonController::class);
 
     // Driver Profile Routes
     Route::post('driver-profiles/update-email', [DriverProfileController::class, 'updateEmail'])->name('driver-profiles.update-email');
