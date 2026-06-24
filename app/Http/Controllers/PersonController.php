@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Person;
 use App\Models\PersonFile;
+use App\Services\DriverService;
 use App\Services\PersonService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -56,6 +57,82 @@ class PersonController extends Controller
         }
 
         return redirect()->route('persons.show', $person->id)->with('success', 'Person created.');
+    }
+
+    /**
+     * Show the IMI driver list with import buttons.
+     */
+    public function importFromImiIndex(Request $request, DriverService $driverService)
+    {
+        $startKey = $request->get('startKey');
+        try {
+            $result = $driverService->getDriversPaginated(50, $startKey);
+            $drivers = $result['items'] ?? $result ?? [];
+            $nextKey = $result['lastEvaluatedKey'] ?? null;
+        } catch (\Throwable $e) {
+            return redirect()->route('persons.index')
+                ->with('error', 'Failed to load IMI drivers: ' . $e->getMessage());
+        }
+
+        // Map imi_driver_id → local Person for "already imported" badge
+        $driverIds = collect($drivers)->pluck('driverId')->filter()->values();
+        $linkedByDriverId = Person::where('user_id', auth()->id())
+            ->whereIn('imi_driver_id', $driverIds)
+            ->get(['id', 'imi_driver_id'])
+            ->keyBy('imi_driver_id');
+
+        return view('persons.import_from_imi', compact('drivers', 'nextKey', 'startKey', 'linkedByDriverId'));
+    }
+
+    public function importFromImiOne(Request $request)
+    {
+        $request->validate(['driver_id' => 'required|string']);
+        $result = $this->personService->importFromImi($request->input('driver_id'));
+
+        if ($result['success']) {
+            $msg = $result['created']
+                ? 'Imported driver into HR.'
+                : 'Driver was already imported.';
+            return redirect()->route('persons.show', $result['person']->id)->with('success', $msg);
+        }
+
+        return redirect()->back()->with('error', 'Import failed: ' . $result['error']);
+    }
+
+    public function importFromImiBulk(Request $request, DriverService $driverService)
+    {
+        $created = 0;
+        $skipped = 0;
+        $failed = 0;
+        $startKey = null;
+
+        // Walk all pages once
+        do {
+            try {
+                $params = ['limit' => 250];
+                if ($startKey) $params['startKey'] = $startKey;
+                $page = $driverService->getDrivers($params);
+            } catch (\Throwable $e) {
+                return redirect()->route('persons.import-from-imi')
+                    ->with('error', 'Bulk import aborted: ' . $e->getMessage());
+            }
+
+            $batch = $page['items'] ?? $page ?? [];
+            $startKey = $page['lastEvaluatedKey'] ?? null;
+
+            foreach ($batch as $driver) {
+                $driverId = $driver['driverId'] ?? null;
+                if (!$driverId) continue;
+
+                $result = $this->personService->importFromImi($driverId);
+                if ($result['success'] && $result['created']) $created++;
+                elseif ($result['success'] && !$result['created']) $skipped++;
+                else $failed++;
+            }
+        } while ($startKey);
+
+        return redirect()->route('persons.import-from-imi')
+            ->with('success', "Bulk import complete — {$created} imported, {$skipped} already linked, {$failed} failed.");
     }
 
     public function syncToImi(string $id)

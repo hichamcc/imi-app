@@ -5,9 +5,14 @@
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ __('Persons') }}</h1>
                 <p class="text-gray-600 dark:text-gray-400">{{ __('HR employee records') }}</p>
             </div>
-            <a href="{{ route('persons.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                {{ __('Add Person') }}
-            </a>
+            <div class="flex gap-2">
+                <a href="{{ route('persons.import-from-imi') }}" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    {{ __('Import from IMI') }}
+                </a>
+                <a href="{{ route('persons.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    {{ __('Add Person') }}
+                </a>
+            </div>
         </div>
 
         @if(session('success'))
