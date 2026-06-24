@@ -6,6 +6,12 @@
                 <p class="text-gray-600 dark:text-gray-400">{{ __('HR employee records') }}</p>
             </div>
             <div class="flex gap-2">
+                <form method="POST" action="{{ route('persons.refresh-imi-presence') }}">
+                    @csrf
+                    <button type="submit" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                        {{ __('Refresh IMI Presence') }}
+                    </button>
+                </form>
                 <a href="{{ route('persons.import-from-imi') }}" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                     {{ __('Import from IMI') }}
                 </a>
@@ -23,6 +29,11 @@
         @if(session('warning'))
             <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg">
                 {{ session('warning') }}
+            </div>
+        @endif
+        @if(!empty($lookupError ?? null))
+            <div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
+                {{ $lookupError }}
             </div>
         @endif
 
@@ -76,12 +87,31 @@
                                         @if($person->phone)<div class="text-xs text-gray-500">{{ $person->phone }}</div>@endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
+                                        @php $matches = $imiPresence[$person->id] ?? []; @endphp
                                         @if($person->imi_driver_id)
-                                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
-                                                {{ __('Linked') }}
-                                            </span>
+                                            <div class="space-y-1">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">{{ __('Linked') }}</span>
+                                                @if($person->imiUser)
+                                                    <div class="text-xs text-gray-600 dark:text-gray-300">{{ $person->imiUser->name }}</div>
+                                                @endif
+                                            </div>
+                                        @elseif(count($matches) > 0)
+                                            <div class="space-y-1">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                                    {{ __('Found in IMI') }}
+                                                </span>
+                                                @foreach($matches as $m)
+                                                    <form method="POST" action="{{ route('persons.link-to-imi', $person->id) }}" class="flex items-center gap-1">
+                                                        @csrf
+                                                        <input type="hidden" name="driver_id" value="{{ $m['driver_id'] }}">
+                                                        <input type="hidden" name="company_user_id" value="{{ $m['company_user_id'] }}">
+                                                        <span class="text-xs text-gray-700 dark:text-gray-300">{{ $m['company_name'] }}</span>
+                                                        <button type="submit" class="text-xs text-blue-600 hover:text-blue-800 underline">{{ __('Link') }}</button>
+                                                    </form>
+                                                @endforeach
+                                            </div>
                                         @else
-                                            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" title="{{ __('Not in IMI') }}">
+                                            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" title="{{ __('Not found in any IMI org') }}">
                                                 ⚠️ {{ __('Missing in IMI') }}
                                             </span>
                                         @endif

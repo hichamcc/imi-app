@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Person;
 use App\Models\PersonFile;
 use App\Services\DriverService;
+use App\Services\ImiPresenceLookup;
 use App\Services\PersonService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -14,7 +15,7 @@ class PersonController extends Controller
 {
     public function __construct(protected PersonService $personService) {}
 
-    public function index(Request $request)
+    public function index(Request $request, ImiPresenceLookup $lookup)
     {
         $query = Person::where('user_id', auth()->id())
             ->orderBy('last_name')
@@ -31,7 +32,46 @@ class PersonController extends Controller
 
         $persons = $query->paginate(20)->withQueryString();
 
-        return view('persons.index', compact('persons'));
+        // Build IMI presence map for visible persons only
+        $imiPresence = [];
+        $lookupError = null;
+        try {
+            foreach ($persons as $person) {
+                $dob = $person->date_of_birth?->format('Y-m-d');
+                $imiPresence[$person->id] = $lookup->findForName(
+                    $person->first_name,
+                    $person->last_name,
+                    $dob,
+                );
+            }
+        } catch (\Throwable $e) {
+            $lookupError = 'IMI presence lookup partially failed: ' . $e->getMessage();
+        }
+
+        return view('persons.index', compact('persons', 'imiPresence', 'lookupError'));
+    }
+
+    public function refreshImiPresence(ImiPresenceLookup $lookup)
+    {
+        $lookup->bust();
+        return redirect()->route('persons.index')->with('success', 'IMI presence cache refreshed.');
+    }
+
+    public function linkToImiDriver(Request $request, string $id)
+    {
+        $request->validate([
+            'driver_id' => 'required|string',
+            'company_user_id' => 'required|exists:users,id',
+        ]);
+
+        $person = Person::where('user_id', auth()->id())->findOrFail($id);
+
+        $person->update([
+            'imi_driver_id' => $request->input('driver_id'),
+            'imi_user_id' => $request->input('company_user_id'),
+        ]);
+
+        return redirect()->back()->with('success', 'Linked to IMI driver.');
     }
 
     public function create()

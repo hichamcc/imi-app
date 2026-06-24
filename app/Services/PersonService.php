@@ -6,7 +6,10 @@ use App\Models\Person;
 
 class PersonService
 {
-    public function __construct(protected DriverService $driverService) {}
+    public function __construct(
+        protected DriverService $driverService,
+        protected ImiPresenceLookup $presenceLookup,
+    ) {}
 
     /**
      * Map a Person to the IMI/RTPD driver API payload.
@@ -108,6 +111,7 @@ class PersonService
             $attrs['position'] = 'Driver';
 
             $person = Person::create($attrs);
+            $this->presenceLookup->bust();
 
             return ['success' => true, 'person' => $person, 'created' => true, 'error' => null];
         } catch (\Throwable $e) {
@@ -148,6 +152,8 @@ class PersonService
                 'imi_driver_id' => $driverId,
                 'imi_user_id' => auth()->id(),
             ]);
+
+            $this->presenceLookup->bust();
 
             return ['success' => true, 'driver_id' => $driverId, 'error' => null];
         } catch (\Throwable $e) {
