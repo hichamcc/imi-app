@@ -15,6 +15,11 @@
                 {{ session('success') }}
             </div>
         @endif
+        @if(session('warning'))
+            <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg">
+                {{ session('warning') }}
+            </div>
+        @endif
 
         <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <form method="GET" action="{{ route('persons.index') }}" class="flex gap-3">

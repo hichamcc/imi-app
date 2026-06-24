@@ -21,6 +21,16 @@
                 {{ session('success') }}
             </div>
         @endif
+        @if(session('warning'))
+            <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg">
+                {{ session('warning') }}
+            </div>
+        @endif
+        @if(session('error'))
+            <div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg">
+                {{ session('error') }}
+            </div>
+        @endif
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2 space-y-6">
@@ -113,10 +123,20 @@
                     @if($person->imi_driver_id)
                         <div class="text-sm">
                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">{{ __('Linked to IMI') }}</span>
-                            <p class="mt-2 text-gray-500 dark:text-gray-400 text-xs font-mono break-all">{{ $person->imi_driver_id }}</p>
+                            @if($person->imiUser)
+                                <p class="mt-2 text-xs text-gray-600 dark:text-gray-300">{{ __('Created under') }}: <span class="font-medium">{{ $person->imiUser->name }}</span></p>
+                            @endif
+                            <p class="mt-1 text-gray-500 dark:text-gray-400 text-xs font-mono break-all">{{ $person->imi_driver_id }}</p>
                         </div>
                     @else
-                        <p class="text-sm text-yellow-800 dark:text-yellow-300">⚠️ {{ __('This person is not linked to an IMI driver yet.') }}</p>
+                        <p class="text-sm text-yellow-800 dark:text-yellow-300 mb-3">⚠️ {{ __('This person is not linked to an IMI driver yet.') }}</p>
+                        <form method="POST" action="{{ route('persons.sync-to-imi', $person->id) }}">
+                            @csrf
+                            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium text-sm">
+                                {{ __('Sync to IMI now') }}
+                            </button>
+                        </form>
+                        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ __('All IMI driver fields must be filled (DOB, license, document, full address, contract start, applicable law).') }}</p>
                     @endif
                 </div>
 

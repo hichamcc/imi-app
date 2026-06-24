@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Person;
 use App\Models\PersonFile;
+use App\Services\PersonService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class PersonController extends Controller
 {
+    public function __construct(protected PersonService $personService) {}
+
     public function index(Request $request)
     {
         $query = Person::where('user_id', auth()->id())
@@ -42,7 +45,31 @@ class PersonController extends Controller
 
         $person = Person::create($validated);
 
+        if ($request->boolean('also_create_in_imi')) {
+            $result = $this->personService->syncToImi($person);
+            if ($result['success']) {
+                return redirect()->route('persons.show', $person->id)
+                    ->with('success', 'Person created and synced to IMI (driver ID: ' . $result['driver_id'] . ').');
+            }
+            return redirect()->route('persons.show', $person->id)
+                ->with('warning', 'Person created locally, but IMI sync failed: ' . $result['error']);
+        }
+
         return redirect()->route('persons.show', $person->id)->with('success', 'Person created.');
+    }
+
+    public function syncToImi(string $id)
+    {
+        $person = Person::where('user_id', auth()->id())->findOrFail($id);
+        $result = $this->personService->syncToImi($person);
+
+        if ($result['success']) {
+            return redirect()->route('persons.show', $person->id)
+                ->with('success', 'Synced to IMI. Driver ID: ' . $result['driver_id']);
+        }
+
+        return redirect()->route('persons.show', $person->id)
+            ->with('error', 'IMI sync failed: ' . $result['error']);
     }
 
     public function show(string $id)

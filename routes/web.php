@@ -113,6 +113,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::post('persons/{person}/files', [PersonController::class, 'uploadFile'])->name('persons.files.upload');
     Route::get('persons/{person}/files/{file}/download', [PersonController::class, 'downloadFile'])->name('persons.files.download');
     Route::delete('persons/{person}/files/{file}', [PersonController::class, 'deleteFile'])->name('persons.files.destroy');
+    Route::post('persons/{person}/sync-to-imi', [PersonController::class, 'syncToImi'])->name('persons.sync-to-imi');
     Route::resource('persons', PersonController::class);
 
     // Driver Profile Routes
