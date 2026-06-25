@@ -50,6 +50,12 @@
                             {{ __('Persons') }}
                         </x-navlist.item>
                     </x-navlist.group>
+
+                    <x-navlist.group :heading="__('Payroll')">
+                        <x-navlist.item before="phosphor-receipt" :href="route('payroll-imports.index')" :current="request()->routeIs('payroll-imports.*')">
+                            {{ __('Imports') }}
+                        </x-navlist.item>
+                    </x-navlist.group>
                 @endif
 
             </x-navlist>

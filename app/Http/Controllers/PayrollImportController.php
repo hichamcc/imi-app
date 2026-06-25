@@ -1,0 +1,173 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\PayrollImport;
+use App\Models\PayrollImportRow;
+use App\Models\Person;
+use App\Services\BankFileParser;
+use App\Services\ImiPresenceLookup;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+
+class PayrollImportController extends Controller
+{
+    public function index()
+    {
+        $imports = PayrollImport::where('user_id', auth()->id())
+            ->latest()
+            ->paginate(20);
+
+        return view('payroll.imports.index', compact('imports'));
+    }
+
+    public function create()
+    {
+        return view('payroll.imports.create');
+    }
+
+    public function store(Request $request, BankFileParser $parser)
+    {
+        $validated = $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls,csv|max:10240', // 10 MB
+            'payroll_month' => 'required|date',
+            'is_payroll' => 'nullable|boolean',
+        ]);
+
+        $uploaded = $request->file('file');
+        $path = $uploaded->store('payroll-imports/' . auth()->id(), 'local');
+        $fullPath = Storage::disk('local')->path($path);
+
+        try {
+            $parsed = $parser->parse($fullPath);
+        } catch (\Throwable $e) {
+            Storage::disk('local')->delete($path);
+            return redirect()->back()->withInput()
+                ->with('error', 'Failed to parse file: ' . $e->getMessage());
+        }
+
+        $import = DB::transaction(function () use ($validated, $request, $uploaded, $path, $parsed) {
+            $import = PayrollImport::create([
+                'user_id' => auth()->id(),
+                'original_filename' => $uploaded->getClientOriginalName(),
+                'stored_path' => $path,
+                'account_number' => $parsed['meta']['account_number'] ?? null,
+                'currency' => $parsed['meta']['currency'] ?? null,
+                'payroll_month' => $validated['payroll_month'],
+                'is_payroll' => $request->boolean('is_payroll', true),
+                'status' => 'pending',
+                'total_rows' => count($parsed['rows']),
+            ]);
+
+            // Pre-match against local persons by name (case-insensitive)
+            $personLookup = $this->buildLocalPersonLookup();
+
+            foreach ($parsed['rows'] as $r) {
+                $matchedPersonId = null;
+                if ($r['parsed_name']) {
+                    $key = strtolower(trim($r['parsed_name']));
+                    $matchedPersonId = $personLookup[$key] ?? null;
+                }
+
+                PayrollImportRow::create([
+                    'payroll_import_id' => $import->id,
+                    'row_index' => $r['row_index'],
+                    'date' => $r['date'],
+                    'value_date' => $r['value_date'],
+                    'description' => $r['description'],
+                    'debit' => $r['debit'],
+                    'credit' => $r['credit'],
+                    'balance' => $r['balance'],
+                    'parsed_name' => $r['parsed_name'],
+                    'reference' => $r['reference'],
+                    'is_payroll' => $r['looks_like_payroll'],   // pre-check the likely ones
+                    'looks_like_payroll' => $r['looks_like_payroll'],
+                    'matched_person_id' => $matchedPersonId,
+                ]);
+            }
+
+            return $import;
+        });
+
+        return redirect()->route('payroll-imports.review', $import->id)
+            ->with('success', "Parsed {$import->total_rows} rows. Review and confirm payroll lines below.");
+    }
+
+    public function review(string $id, ImiPresenceLookup $lookup)
+    {
+        $import = PayrollImport::where('user_id', auth()->id())->findOrFail($id);
+        $rows = $import->rows()->with('matchedPerson')->get();
+
+        // For unmatched rows with a parsed_name, look them up cross-org in IMI
+        $imiPresence = [];
+        foreach ($rows as $row) {
+            if (!$row->parsed_name || $row->matched_person_id) continue;
+            $parts = preg_split('/\s+/', trim($row->parsed_name));
+            $first = $parts[0] ?? '';
+            $last = count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : '';
+            $imiPresence[$row->id] = $lookup->findForName($first, $last);
+        }
+
+        return view('payroll.imports.review', compact('import', 'rows', 'imiPresence'));
+    }
+
+    /**
+     * Persist the user's tweaks to the rows (which to import, name corrections, person matches).
+     */
+    public function updateReview(Request $request, string $id)
+    {
+        $import = PayrollImport::where('user_id', auth()->id())->findOrFail($id);
+
+        $request->validate([
+            'rows' => 'array',
+            'rows.*.is_payroll' => 'nullable|boolean',
+            'rows.*.parsed_name' => 'nullable|string|max:255',
+            'rows.*.matched_person_id' => 'nullable|integer|exists:persons,id',
+        ]);
+
+        $input = $request->input('rows', []);
+
+        foreach ($import->rows as $row) {
+            $key = (string) $row->id;
+            if (!isset($input[$key])) {
+                // Unticked rows aren't sent in the form; treat as not payroll
+                $row->update(['is_payroll' => false]);
+                continue;
+            }
+
+            $row->update([
+                'is_payroll' => (bool) ($input[$key]['is_payroll'] ?? false),
+                'parsed_name' => $input[$key]['parsed_name'] ?? $row->parsed_name,
+                'matched_person_id' => $input[$key]['matched_person_id'] ?? $row->matched_person_id,
+            ]);
+        }
+
+        $import->update(['status' => 'reviewed']);
+
+        return redirect()->route('payroll-imports.review', $import->id)
+            ->with('success', 'Review saved. Ready to generate payslips (next PR).');
+    }
+
+    public function destroy(string $id)
+    {
+        $import = PayrollImport::where('user_id', auth()->id())->findOrFail($id);
+        $import->delete();
+        return redirect()->route('payroll-imports.index')->with('success', 'Import deleted.');
+    }
+
+    // ---- helpers ----
+
+    private function buildLocalPersonLookup(): array
+    {
+        $persons = Person::where('user_id', auth()->id())
+            ->get(['id', 'first_name', 'last_name']);
+
+        $map = [];
+        foreach ($persons as $p) {
+            $key = strtolower(trim($p->first_name . ' ' . $p->last_name));
+            $map[$key] = $p->id;
+        }
+        return $map;
+    }
+}
