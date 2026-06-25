@@ -27,6 +27,14 @@ class User extends Authenticatable
         'api_operator_id',
         'api_base_url',
         'applicable_law',
+        'company_name',
+        'company_registration',
+        'company_address_line',
+        'company_post_code',
+        'company_city',
+        'company_country',
+        'company_phone',
+        'company_email',
         'is_admin',
         'is_active',
     ];
@@ -85,6 +93,23 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->is_admin;
+    }
+
+    /**
+     * Company header for PDFs (contract, payslip). Falls back to user name if not set.
+     */
+    public function getCompanyHeader(): array
+    {
+        return [
+            'name' => $this->company_name ?: $this->name,
+            'registration' => $this->company_registration,
+            'address_line' => $this->company_address_line,
+            'post_code' => $this->company_post_code,
+            'city' => $this->company_city,
+            'country' => $this->company_country,
+            'phone' => $this->company_phone,
+            'email' => $this->company_email ?: $this->email,
+        ];
     }
 
     /**

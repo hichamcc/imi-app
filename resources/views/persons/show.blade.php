@@ -11,6 +11,9 @@
                 </div>
             </div>
             <div class="flex gap-2">
+                <a href="{{ route('persons.contract', $person->id) }}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium" target="_blank">
+                    {{ __('Download Contract (PDF)') }}
+                </a>
                 <a href="{{ route('persons.edit', $person->id) }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium">{{ __('Edit') }}</a>
                 <a href="{{ route('persons.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium">{{ __('Back') }}</a>
             </div>

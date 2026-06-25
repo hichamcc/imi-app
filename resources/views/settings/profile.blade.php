@@ -56,6 +56,45 @@
                 </p>
             </div>
 
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white mb-1">{{ __('Company Info (for PDF headers)') }}</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">{{ __('Used as the header on employment contracts and payslips.') }}</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <x-label for="company_name">{{ __('Company Name') }}</x-label>
+                        <input type="text" name="company_name" id="company_name" value="{{ old('company_name', $user->company_name) }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <x-label for="company_registration">{{ __('Registration No.') }}</x-label>
+                        <input type="text" name="company_registration" id="company_registration" value="{{ old('company_registration', $user->company_registration) }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div class="md:col-span-2">
+                        <x-label for="company_address_line">{{ __('Address') }}</x-label>
+                        <input type="text" name="company_address_line" id="company_address_line" value="{{ old('company_address_line', $user->company_address_line) }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <x-label for="company_post_code">{{ __('Post Code') }}</x-label>
+                        <input type="text" name="company_post_code" id="company_post_code" value="{{ old('company_post_code', $user->company_post_code) }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <x-label for="company_city">{{ __('City') }}</x-label>
+                        <input type="text" name="company_city" id="company_city" value="{{ old('company_city', $user->company_city) }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <x-label for="company_country">{{ __('Country') }}</x-label>
+                        <input type="text" name="company_country" id="company_country" value="{{ old('company_country', $user->company_country) }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <x-label for="company_phone">{{ __('Phone') }}</x-label>
+                        <input type="text" name="company_phone" id="company_phone" value="{{ old('company_phone', $user->company_phone) }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <x-label for="company_email">{{ __('Email') }}</x-label>
+                        <input type="email" name="company_email" id="company_email" value="{{ old('company_email', $user->company_email) }}" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm">
+                    </div>
+                </div>
+            </div>
+
             <div class="flex items-center gap-4">
                 <div class="flex items-center justify-end">
                     <x-button class="w-full">{{ __('Save') }}</x-button>

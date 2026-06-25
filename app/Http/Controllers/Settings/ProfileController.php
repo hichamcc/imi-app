@@ -37,6 +37,14 @@ class ProfileController extends Controller
             'api_operator_id' => ['nullable', 'string', 'max:255'],
             'api_base_url' => ['nullable', 'url', 'max:255'],
             'applicable_law' => ['nullable', 'string', 'size:2'],
+            'company_name' => ['nullable', 'string', 'max:255'],
+            'company_registration' => ['nullable', 'string', 'max:100'],
+            'company_address_line' => ['nullable', 'string', 'max:255'],
+            'company_post_code' => ['nullable', 'string', 'max:20'],
+            'company_city' => ['nullable', 'string', 'max:100'],
+            'company_country' => ['nullable', 'string', 'max:100'],
+            'company_phone' => ['nullable', 'string', 'max:50'],
+            'company_email' => ['nullable', 'email', 'max:255'],
         ]);
 
         $user->fill($validated);

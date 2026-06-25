@@ -265,6 +265,22 @@ class PersonController extends Controller
         return redirect()->route('persons.show', $person->id)->with('success', 'File deleted.');
     }
 
+    /**
+     * Generate the employment contract PDF for download.
+     */
+    public function generateContract(string $id)
+    {
+        $person = Person::where('user_id', auth()->id())->findOrFail($id);
+        $company = auth()->user()->getCompanyHeader();
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.employment_contract', compact('person', 'company'))
+            ->setPaper('a4');
+
+        $filename = 'employment-contract-' . str_replace(' ', '_', strtolower($person->full_name)) . '.pdf';
+
+        return $pdf->download($filename);
+    }
+
     // ---- Helpers ----
 
     private function formData(): array
