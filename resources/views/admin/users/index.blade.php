@@ -11,6 +11,10 @@
             </a>
         </div>
 
+        @if(session('success'))<div class="bg-green-50 border border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300 px-4 py-3 rounded-lg">{{ session('success') }}</div>@endif
+        @if(session('info'))<div class="bg-blue-50 border border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300 px-4 py-3 rounded-lg">{{ session('info') }}</div>@endif
+        @if(session('error'))<div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg">{{ session('error') }}</div>@endif
+
         <!-- Users Table -->
         <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -119,6 +123,15 @@
                                                         {{ $user->is_active ? __('Deactivate') : __('Activate') }}
                                                     </button>
                                                 </form>
+                                                @if(!$user->is_admin)
+                                                    <form method="POST" action="{{ route('admin.users.toggle-payroll-access', $user) }}" class="inline">
+                                                        @csrf
+                                                        <button type="submit" class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                                                title="{{ __('Toggle HR & Payroll access') }}">
+                                                            {{ $user->can_access_payroll ? __('Revoke Payroll') : __('Grant Payroll') }}
+                                                        </button>
+                                                    </form>
+                                                @endif
                                                 @if(!$user->is_admin || \App\Models\User::where('is_admin', true)->count() > 1)
                                                     <form method="POST" action="{{ route('admin.users.destroy', $user) }}" class="inline">
                                                         @csrf

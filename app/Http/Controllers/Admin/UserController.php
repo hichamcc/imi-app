@@ -192,6 +192,26 @@ class UserController extends Controller
     }
 
     /**
+     * Toggle whether a user can access the HR + Payroll module.
+     * Admins always have access — toggling has no effect for them.
+     */
+    public function togglePayrollAccess(User $user)
+    {
+        $this->checkAdminAccess();
+
+        if ($user->is_admin) {
+            return redirect()->back()
+                ->with('info', 'Administrators always have access to the HR & Payroll module.');
+        }
+
+        $user->update(['can_access_payroll' => !$user->can_access_payroll]);
+
+        $state = $user->can_access_payroll ? 'granted' : 'revoked';
+        return redirect()->back()
+            ->with('success', "HR & Payroll access has been {$state} for {$user->name}.");
+    }
+
+    /**
      * Toggle user active status
      */
     public function toggleStatus(User $user)

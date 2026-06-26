@@ -173,6 +173,8 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('users', \App\Http\Controllers\Admin\UserController::class);
         Route::post('users/{user}/toggle-status', [\App\Http\Controllers\Admin\UserController::class, 'toggleStatus'])
             ->name('users.toggle-status');
+        Route::post('users/{user}/toggle-payroll-access', [\App\Http\Controllers\Admin\UserController::class, 'togglePayrollAccess'])
+            ->name('users.toggle-payroll-access');
 
         // Group Management Routes
         Route::post('groups', [UserGroupController::class, 'store'])->name('groups.store');
