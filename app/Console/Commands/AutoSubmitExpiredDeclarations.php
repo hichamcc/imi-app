@@ -276,10 +276,19 @@ class AutoSubmitExpiredDeclarations extends Command
             'declarationEndDate' => $newEndDate,
             'declarationOperationType' => $originalDeclaration['declarationOperationType'] ?? ['INTERNATIONAL_CARRIAGE'],
             'declarationTransportType' => $originalDeclaration['declarationTransportType'] ?? ['CARRIAGE_OF_GOODS'],
-            'declarationVehiclePlateNumber' => $originalDeclaration['declarationVehiclePlateNumber'] ?? [],
             'driverId' => $originalDeclaration['driverId'],
             'otherContactAsTransportManager' => $otherContactAsTransportManager,
         ];
+
+        // Carry forward whichever of the three plate fields the source declaration used.
+        // The /plate-numbers API split goods into light/heavy; passengers still use the
+        // legacy declarationVehiclePlateNumber. Copy only non-empty ones — the API rejects
+        // empty arrays for the fields it doesn't need.
+        foreach (['declarationVehiclePlateNumber', 'declarationVehiclePlateNumberLight', 'declarationVehiclePlateNumberHeavy'] as $plateField) {
+            if (!empty($originalDeclaration[$plateField])) {
+                $newData[$plateField] = $originalDeclaration[$plateField];
+            }
+        }
 
         // Add optional contact fields if they exist
         $optionalFields = [

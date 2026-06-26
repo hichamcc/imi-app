@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\DeclarationService;
 use App\Services\DriverService;
+use App\Services\PlateNumberService;
 use App\Services\TruckService;
 use Illuminate\Http\Request;
 
@@ -12,12 +13,91 @@ class DeclarationController extends Controller
     protected DeclarationService $declarationService;
     protected DriverService $driverService;
     protected TruckService $truckService;
+    protected PlateNumberService $plateNumberService;
 
-    public function __construct(DeclarationService $declarationService, DriverService $driverService, TruckService $truckService)
-    {
+    public function __construct(
+        DeclarationService $declarationService,
+        DriverService $driverService,
+        TruckService $truckService,
+        PlateNumberService $plateNumberService,
+    ) {
         $this->declarationService = $declarationService;
         $this->driverService = $driverService;
         $this->truckService = $truckService;
+        $this->plateNumberService = $plateNumberService;
+    }
+
+    /**
+     * Fetch the API plate-number register and bucket by transport+weight.
+     * Returns ['goods_light' => [...], 'goods_heavy' => [...], 'passengers' => [...]].
+     * Falls back to the local trucks table on API error so the form is still usable.
+     */
+    private function fetchPlateGroups(): array
+    {
+        $groups = ['goods_light' => [], 'goods_heavy' => [], 'passengers' => [], 'source' => 'api', 'error' => null];
+
+        try {
+            $items = $this->plateNumberService->all();
+            foreach ($items as $p) {
+                $entry = [
+                    'plate' => $p['plateNumber'] ?? null,
+                    'country' => $p['registrationCountry'] ?? null,
+                    'id' => $p['plateNumberId'] ?? null,
+                ];
+                if (!$entry['plate']) continue;
+
+                $type = $p['transportType'] ?? null;
+                $weight = $p['vehicleWeight'] ?? '';
+
+                if ($type === 'CARRIAGE_OF_PASSENGERS') {
+                    $groups['passengers'][] = $entry;
+                } elseif ($type === 'CARRIAGE_OF_GOODS') {
+                    if ($weight === 'LIGHT') $groups['goods_light'][] = $entry;
+                    else $groups['goods_heavy'][] = $entry; // default heavy (covers HEAVY + empty)
+                }
+            }
+        } catch (\Throwable $e) {
+            $groups['source'] = 'local';
+            $groups['error'] = $e->getMessage();
+            \Log::warning('Failed to load API plate-numbers, falling back to local trucks', ['error' => $e->getMessage()]);
+
+            foreach (auth()->user()->trucks()->orderBy('plate')->get() as $t) {
+                $entry = ['plate' => $t->plate, 'country' => $t->registration_country, 'id' => null];
+                if ($t->carriage_type === \App\Models\Truck::CARRIAGE_PASSENGERS) {
+                    $groups['passengers'][] = $entry;
+                } elseif ($t->weight_type === \App\Models\Truck::WEIGHT_LIGHT) {
+                    $groups['goods_light'][] = $entry;
+                } else {
+                    $groups['goods_heavy'][] = $entry;
+                }
+            }
+        }
+
+        return $groups;
+    }
+
+    /**
+     * Reshape validated form data into the API declaration payload — split light/heavy
+     * for goods, and only set declarationVehiclePlateNumber for passengers.
+     */
+    private function buildPlatePayload(array $validated): array
+    {
+        $payload = [];
+        $transportTypes = $validated['declarationTransportType'] ?? [];
+
+        if (in_array('CARRIAGE_OF_GOODS', $transportTypes, true)) {
+            $light = array_values(array_filter($validated['declarationVehiclePlateNumberLight'] ?? []));
+            $heavy = array_values(array_filter($validated['declarationVehiclePlateNumberHeavy'] ?? []));
+            if (!empty($light)) $payload['declarationVehiclePlateNumberLight'] = $light;
+            if (!empty($heavy)) $payload['declarationVehiclePlateNumberHeavy'] = $heavy;
+        }
+
+        if (in_array('CARRIAGE_OF_PASSENGERS', $transportTypes, true)) {
+            $passenger = array_values(array_filter($validated['declarationVehiclePlateNumber'] ?? []));
+            if (!empty($passenger)) $payload['declarationVehiclePlateNumber'] = $passenger;
+        }
+
+        return $payload;
     }
 
     /**
@@ -74,15 +154,12 @@ class DeclarationController extends Controller
     public function create()
     {
         try {
-            // Get drivers for the dropdown
             $drivers = $this->driverService->getDriversPaginated(250);
-
-            // Get available trucks for plate numbers
-            $trucks = $this->truckService->getAvailableTrucks();
+            $plateGroups = $this->fetchPlateGroups();
 
             return view('declarations.create', [
                 'drivers' => $drivers['items'] ?? [],
-                'trucks' => $trucks,
+                'plateGroups' => $plateGroups,
                 'countries' => DeclarationService::getPostingCountries(),
                 'operationTypes' => DeclarationService::getOperationTypes(),
                 'transportTypes' => DeclarationService::getTransportTypes()
@@ -102,8 +179,12 @@ class DeclarationController extends Controller
         $validated = $request->validate([
             'declarationPostingCountries' => 'required|array|min:1',
             'declarationPostingCountries.*' => 'string|size:2',
-            'declarationVehiclePlateNumber' => 'required|array|min:1',
-            'declarationVehiclePlateNumber.*' => 'required|string|max:20',
+            'declarationVehiclePlateNumber' => 'nullable|array',
+            'declarationVehiclePlateNumber.*' => 'string|max:20',
+            'declarationVehiclePlateNumberLight' => 'nullable|array',
+            'declarationVehiclePlateNumberLight.*' => 'string|max:20',
+            'declarationVehiclePlateNumberHeavy' => 'nullable|array',
+            'declarationVehiclePlateNumberHeavy.*' => 'string|max:20',
             'declarationStartDate' => 'required|date|date_format:Y-m-d',
             'declarationEndDate' => 'required|date|date_format:Y-m-d|after:declarationStartDate',
             'declarationOperationType' => 'required|array|min:1|max:2',
@@ -118,9 +199,20 @@ class DeclarationController extends Controller
             'otherContactPhone' => 'nullable|string|max:20',
         ]);
 
-
-        // Ensure boolean conversion for the API
         $validated['otherContactAsTransportManager'] = (bool) $validated['otherContactAsTransportManager'];
+
+        $platePayload = $this->buildPlatePayload($validated);
+        if (empty($platePayload)) {
+            return redirect()->back()->withInput()
+                ->with('error', 'Select at least one plate number for the chosen transport type(s).');
+        }
+        // Strip out the form-level plate arrays — only the API-shaped fields go on the wire
+        unset(
+            $validated['declarationVehiclePlateNumber'],
+            $validated['declarationVehiclePlateNumberLight'],
+            $validated['declarationVehiclePlateNumberHeavy'],
+        );
+        $validated = array_merge($validated, $platePayload);
 
         $selectedCountries = $validated['declarationPostingCountries'];
         $createdDeclarations = [];
@@ -206,16 +298,13 @@ class DeclarationController extends Controller
                     ->with('error', 'Only draft declarations can be edited.');
             }
 
-            // Get drivers for the dropdown
             $drivers = $this->driverService->getDriversPaginated(250);
-
-            // Get available trucks for plate numbers
-            $trucks = $this->truckService->getAvailableTrucks();
+            $plateGroups = $this->fetchPlateGroups();
 
             return view('declarations.edit', [
                 'declaration' => $declaration,
                 'drivers' => $drivers['items'] ?? [],
-                'trucks' => $trucks,
+                'plateGroups' => $plateGroups,
                 'countries' => DeclarationService::getPostingCountries(),
                 'operationTypes' => DeclarationService::getOperationTypes(),
                 'transportTypes' => DeclarationService::getTransportTypes()
@@ -239,8 +328,12 @@ class DeclarationController extends Controller
             'declarationOperationType.*' => 'string|in:CABOTAGE_OPERATIONS,INTERNATIONAL_CARRIAGE',
             'declarationTransportType' => 'required|array|min:1|max:2',
             'declarationTransportType.*' => 'string|in:CARRIAGE_OF_GOODS,CARRIAGE_OF_PASSENGERS',
-            'declarationVehiclePlateNumber' => 'required|array|min:1',
+            'declarationVehiclePlateNumber' => 'nullable|array',
             'declarationVehiclePlateNumber.*' => 'string|max:20',
+            'declarationVehiclePlateNumberLight' => 'nullable|array',
+            'declarationVehiclePlateNumberLight.*' => 'string|max:20',
+            'declarationVehiclePlateNumberHeavy' => 'nullable|array',
+            'declarationVehiclePlateNumberHeavy.*' => 'string|max:20',
             'driverId' => 'required|string',
             'otherContactAsTransportManager' => 'boolean',
             'otherContactFirstName' => 'nullable|string|max:255',
@@ -249,8 +342,17 @@ class DeclarationController extends Controller
             'otherContactPhone' => 'nullable|string|max:20',
         ]);
 
-        // Clean up array values
-        $validated['declarationVehiclePlateNumber'] = array_filter($validated['declarationVehiclePlateNumber']);
+        $platePayload = $this->buildPlatePayload($validated);
+        if (empty($platePayload)) {
+            return redirect()->back()->withInput()
+                ->with('error', 'Select at least one plate number for the chosen transport type(s).');
+        }
+        unset(
+            $validated['declarationVehiclePlateNumber'],
+            $validated['declarationVehiclePlateNumberLight'],
+            $validated['declarationVehiclePlateNumberHeavy'],
+        );
+        $validated = array_merge($validated, $platePayload);
 
         try {
             $declaration = $this->declarationService->updateDeclaration($id, $validated);
@@ -300,15 +402,23 @@ class DeclarationController extends Controller
                     ->with('info', 'This declaration is not submitted. Use regular edit form.');
             }
 
-            // Get user's trucks for plate selection
-            $trucks = auth()->user()->trucks()->where('status', 'available')->get();
+            $plateGroups = $this->fetchPlateGroups();
 
-            // Check for plates in declaration that don't exist in user's trucks
-            $declarationPlates = $declaration['declarationVehiclePlateNumber'] ?? [];
-            $existingPlates = $trucks->pluck('plate')->toArray();
-            $missingPlates = array_diff($declarationPlates, $existingPlates);
+            // Aggregate all known plates from the API to spot any missing-from-register plates
+            $allKnownPlates = array_merge(
+                array_column($plateGroups['goods_light'], 'plate'),
+                array_column($plateGroups['goods_heavy'], 'plate'),
+                array_column($plateGroups['passengers'], 'plate'),
+            );
 
-            return view('declarations.edit-submitted', compact('declaration', 'trucks', 'missingPlates'));
+            $declarationPlates = array_merge(
+                $declaration['declarationVehiclePlateNumber'] ?? [],
+                $declaration['declarationVehiclePlateNumberLight'] ?? [],
+                $declaration['declarationVehiclePlateNumberHeavy'] ?? [],
+            );
+            $missingPlates = array_values(array_diff($declarationPlates, $allKnownPlates));
+
+            return view('declarations.edit-submitted', compact('declaration', 'plateGroups', 'missingPlates'));
         } catch (\Exception $e) {
             return redirect()->route('declarations.index')
                 ->with('error', 'Failed to load declaration: ' . $e->getMessage());
@@ -327,8 +437,12 @@ class DeclarationController extends Controller
             'declarationOperationType.*' => 'string|in:CABOTAGE_OPERATIONS,INTERNATIONAL_CARRIAGE',
             'declarationTransportType' => 'required|array|min:1|max:2',
             'declarationTransportType.*' => 'string|in:CARRIAGE_OF_GOODS,CARRIAGE_OF_PASSENGERS',
-            'declarationVehiclePlateNumber' => 'required|array|min:1',
+            'declarationVehiclePlateNumber' => 'nullable|array',
             'declarationVehiclePlateNumber.*' => 'string|max:20',
+            'declarationVehiclePlateNumberLight' => 'nullable|array',
+            'declarationVehiclePlateNumberLight.*' => 'string|max:20',
+            'declarationVehiclePlateNumberHeavy' => 'nullable|array',
+            'declarationVehiclePlateNumberHeavy.*' => 'string|max:20',
             'otherContactAsTransportManager' => 'boolean',
             'otherContactFirstName' => 'nullable|string|max:255',
             'otherContactLastName' => 'nullable|string|max:255',
@@ -341,8 +455,17 @@ class DeclarationController extends Controller
             'driverEmail' => 'nullable|email|max:255',
         ]);
 
-        // Clean up array values
-        $validated['declarationVehiclePlateNumber'] = array_filter($validated['declarationVehiclePlateNumber']);
+        $platePayload = $this->buildPlatePayload($validated);
+        if (empty($platePayload)) {
+            return redirect()->back()->withInput()
+                ->with('error', 'Select at least one plate number for the chosen transport type(s).');
+        }
+        unset(
+            $validated['declarationVehiclePlateNumber'],
+            $validated['declarationVehiclePlateNumberLight'],
+            $validated['declarationVehiclePlateNumberHeavy'],
+        );
+        $validated = array_merge($validated, $platePayload);
 
         // Convert checkbox to boolean for API
         $validated['otherContactAsTransportManager'] = isset($validated['otherContactAsTransportManager']) && $validated['otherContactAsTransportManager'];

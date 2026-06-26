@@ -10,6 +10,9 @@
                 <button id="bulkUpdateBtn" type="button" onclick="openBulkUpdateModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors hidden">
                     {{ __('Bulk Update') }} (<span id="bulkUpdateCount">0</span>)
                 </button>
+                <a href="{{ route('trucks.plate-numbers') }}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    {{ __('IMI Plate Register') }}
+                </a>
                 <a href="{{ route('trucks.export-template') }}" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                     {{ __('Export Excel') }}
                 </a>

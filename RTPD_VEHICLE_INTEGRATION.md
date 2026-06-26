@@ -1,6 +1,6 @@
 # RTPD Vehicle Integration — Work Tracker
 
-Status: **In progress** — local prep done, API integration pending provider release.
+Status: **API integration complete** — `/plate-numbers` endpoints wired up, declaration form refactored to use the new split fields.
 
 ---
 
@@ -79,47 +79,65 @@ Route::post('trucks/bulk-update-vehicle-fields', [TruckController::class, 'bulkU
 
 ---
 
-## 🟡 TODO — API integration (do this when the provider releases)
+## ✅ Done — API integration (completed 2026-06-26)
 
-### 1. Vehicle CRUD against the new `/vehicles` endpoints
+### Confirmed endpoint shape (from training OpenAPI 3.1.0)
 
-Pattern to mirror: `DriverService` / `DeclarationService`.
+- Endpoints are **`/plate-numbers`** (not `/vehicles` as we initially guessed).
+- `CreatePlateNumberModelPublic` schema:
+  - `plateNumber` (required)
+  - `registrationCountry` (required, 2 letters)
+  - `transportType` (required, `CARRIAGE_OF_GOODS | CARRIAGE_OF_PASSENGERS`)
+  - `vehicleWeight` (optional, `LIGHT | HEAVY | ''` — pass empty string for passenger vehicles)
+- Declaration model now exposes three plate fields, **all optional**:
+  - `declarationVehiclePlateNumber[]` — passengers
+  - `declarationVehiclePlateNumberLight[]` — light goods
+  - `declarationVehiclePlateNumberHeavy[]` — heavy goods
+- Declaration must reference plates that already exist in the register, or the API rejects it.
 
-- Create `app/Services/VehicleService.php` with: `list`, `get`, `create`, `update`, `delete`, `search`.
-- Endpoint names: TBD — check the updated OpenAPI at <https://api.postingdeclaration-training.eu/api-docs> once it goes live. Add the path to `config/posting.php` under `endpoints.vehicles`.
-- Use `PostingApiService` (same auth/credential pattern as drivers).
+### What was built
 
-### 2. Sync local trucks → API register
+- [app/Services/PlateNumberService.php](app/Services/PlateNumberService.php) — CRUD wrapper (`list`, `paginated`, `all`, `get`, `create`, `update`, `delete`) + `payloadFromTruck()` converter using the API field names (`transportType`, `vehicleWeight`).
+- [config/posting.php](config/posting.php) — added `endpoints.plate_numbers => '/plate-numbers'`.
+- [app/Http/Controllers/DeclarationController.php](app/Http/Controllers/DeclarationController.php):
+  - `fetchPlateGroups()` — pulls the full register, buckets into `goods_light / goods_heavy / passengers`, falls back to local trucks on API error.
+  - `buildPlatePayload()` — turns validated form data into the right `declarationVehiclePlateNumber{Light,Heavy,}` keys based on the selected transport types.
+  - `store()` / `update()` / `updateSubmitted()` now accept all three plate fields (each `nullable|array`), reshape into the API payload, and reject submissions with no plates for the selected transport type.
+  - `editSubmitted()` checks missing plates across all three plate arrays.
+- [app/Http/Controllers/DriverController.php](app/Http/Controllers/DriverController.php) — bulk-clone now copies whichever of the three plate fields the source declaration used.
+- [resources/views/declarations/create.blade.php](resources/views/declarations/create.blade.php) and [edit.blade.php](resources/views/declarations/edit.blade.php) — replaced single plate list with three Alpine-controlled checkbox groups (`Heavy goods`, `Light goods`, `Passenger vehicles`) that show/hide based on the selected `declarationTransportType[]`. Shows a fallback warning if the API register couldn't load.
+- [app/Http/Controllers/TruckController.php](app/Http/Controllers/TruckController.php):
+  - `plateNumbers()` — new page listing both the IMI register **and** local trucks side by side with a per-row "Registered / Missing in IMI / Incomplete" status pill.
+  - `pushPlateNumber()` — POSTs a single truck to `/plate-numbers` and stores the returned `plateNumberId` into `api_vehicle_id`.
+  - `pushAllPlateNumbers()` — idempotent bulk push: fetches the register, skips trucks whose plate already exists (updating `api_vehicle_id` if it was missing), pushes the rest, returns a summary.
+- [resources/views/trucks/plate-numbers.blade.php](resources/views/trucks/plate-numbers.blade.php) + "IMI Plate Register" button on the trucks index → `GET /trucks/plate-numbers`.
 
-Two options:
-- **(a)** "Push to API" button on the truck show/index pages — pushes a single truck or selected trucks to `POST /vehicles`, stores the returned remote ID into `api_vehicle_id`.
-- **(b)** Auto-push on `Truck::store()` / `Truck::update()` after local DB write. Cleaner but riskier (API outage = local create blocked). Recommend (a) first.
+### New routes
 
-### 3. Declaration form changes
+```php
+Route::get('trucks/plate-numbers', [TruckController::class, 'plateNumbers'])->name('trucks.plate-numbers');
+Route::post('trucks/plate-numbers/push-all', [TruckController::class, 'pushAllPlateNumbers'])->name('trucks.plate-numbers.push-all');
+Route::post('trucks/{truck}/push-plate-number', [TruckController::class, 'pushPlateNumber'])->name('trucks.push-plate-number');
+```
 
-[resources/views/declarations/create.blade.php](resources/views/declarations/create.blade.php) currently uses `declarationVehiclePlateNumber[]` (around line 132).
+---
 
-Required changes:
-- Source the vehicle list from `VehicleService::list()` (the API register), **not** the local `trucks` table — otherwise the API will reject the declaration.
-- Show two checkbox groups when goods is selected:
-  - **Light vehicles** → `vehiclePlateNumberLight[]`
-  - **Heavy vehicles** → `vehiclePlateNumberHeavy[]`
-- Show one checkbox group when passenger is selected:
-  - **Passenger vehicles** → `vehiclePlateNumber[]` (unchanged)
-- Toggle visibility dynamically based on `declarationTransportType` checkbox.
-- Also update `DeclarationController::store` / `update` and any clone logic (`DriverController::bulkClone`, `clone`) to send the new field names. Grep for `declarationVehiclePlateNumber` to find every call site.
+## 🟢 Verified field mapping
 
-### 4. Backfill existing local trucks
+| Local Truck column | API field | Notes |
+|---|---|---|
+| `plate` | `plateNumber` | required |
+| `registration_country` | `registrationCountry` | upper-cased before sending |
+| `carriage_type` | `transportType` | values match: `CARRIAGE_OF_GOODS` / `CARRIAGE_OF_PASSENGERS` |
+| `weight_type` (`LIGHT`/`HEAVY`/`N/A`) | `vehicleWeight` | `N/A` → `''` empty string (per spec) |
 
-Existing rows have `registration_country = null`, `carriage_type = null`, `weight_type = 'HEAVY'` (the migration default). Before syncing to the API:
-- Either ask the user to bulk-update them via the new modal (works for small fleets),
-- Or write a `php artisan trucks:backfill-vehicle-fields` command (similar to `drivers:backfill-address-country`) that infers values where possible — e.g. derive `weight_type` from `capacity_tons` (>3.5t = HEAVY, ≤3.5t = LIGHT) and prompt for the rest.
+---
 
-### 5. (Optional) Excel template **import** (read direction)
+## Remaining nice-to-haves (optional)
 
-The provider's portal can ingest the Excel directly. If we also want our app to ingest it (e.g. user uploads a filled template to populate local trucks):
-- Parse `Template` sheet with phpspreadsheet (already installed).
-- For each row, `Truck::updateOrCreate(['plate' => ..., 'user_id' => ...], [...])`.
+- **Backfill command** for old local trucks without registration_country/carriage_type — still useful for fleets created before the new fields existed.
+- **Excel template import** (read direction) — parse the provider's template back into local `trucks` rows.
+- **Auto-link on declaration save** — when the API rejects a declaration because of a missing plate, surface a "Push to register" affordance on the error.
 
 ---
 
@@ -143,12 +161,10 @@ The provider's portal can ingest the Excel directly. If we also want our app to 
 
 ## Resuming this work — checklist
 
-When picking this back up:
-
-1. [ ] Confirm production deadline status — has the provider released the `/vehicles` endpoints yet? Check the training API docs.
-2. [ ] Grab the updated OpenAPI spec; add endpoint paths to `config/posting.php`.
-3. [ ] Build `VehicleService` (CRUD).
-4. [ ] Add "Push to API" UI on trucks index/show.
-5. [ ] Refactor declaration form + controllers to use the new light/heavy fields for goods transport.
-6. [ ] Test end-to-end in the training environment using a test user's credentials before flipping to production.
-7. [ ] Backfill / verify existing trucks have all 3 RTPD fields set before syncing.
+1. [x] Confirm production deadline status — provider released `/plate-numbers`.
+2. [x] Grab the updated OpenAPI spec; add endpoint paths to `config/posting.php`.
+3. [x] Build `PlateNumberService` (CRUD).
+4. [x] Add "Push to IMI" UI (per-row + bulk) on the new `/trucks/plate-numbers` page.
+5. [x] Refactor declaration form + controllers to use the new light/heavy fields for goods transport.
+6. [ ] Test end-to-end in the training/production environment with real credentials.
+7. [ ] Optional: backfill command for legacy trucks missing `registration_country` / `carriage_type`.

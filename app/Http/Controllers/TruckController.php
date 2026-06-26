@@ -3,8 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Truck;
-use App\Services\TruckService;
 use App\Services\DriverService;
+use App\Services\PlateNumberService;
+use App\Services\TruckService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -376,6 +377,110 @@ class TruckController extends Controller
         }, $filename, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
+    }
+
+    /**
+     * Show the IMI plate-number register page + sync controls.
+     */
+    public function plateNumbers(PlateNumberService $plateNumberService)
+    {
+        $error = null;
+        $remote = [];
+        try {
+            $remote = $plateNumberService->all();
+        } catch (\Throwable $e) {
+            $error = $e->getMessage();
+        }
+
+        $remoteByPlate = [];
+        foreach ($remote as $r) {
+            $key = strtoupper(trim($r['plateNumber'] ?? ''));
+            if ($key !== '') $remoteByPlate[$key] = $r;
+        }
+
+        $localTrucks = Truck::where('user_id', auth()->id())->orderBy('plate')->get();
+
+        // Mark each local truck as already in the API register or not
+        $localTrucks->each(function (Truck $t) use ($remoteByPlate) {
+            $key = strtoupper(trim($t->plate));
+            $t->api_match = $remoteByPlate[$key] ?? null;
+        });
+
+        return view('trucks.plate-numbers', compact('remote', 'error', 'localTrucks'));
+    }
+
+    /**
+     * Push a single local truck to the IMI /plate-numbers register.
+     */
+    public function pushPlateNumber(string $id, PlateNumberService $plateNumberService)
+    {
+        $truck = Truck::where('user_id', auth()->id())->findOrFail($id);
+
+        if (empty($truck->registration_country)) {
+            return redirect()->back()->with('error', "Truck '{$truck->plate}' has no registration country set — fill it in before pushing.");
+        }
+        if (empty($truck->carriage_type)) {
+            return redirect()->back()->with('error', "Truck '{$truck->plate}' has no carriage type set.");
+        }
+
+        try {
+            $response = $plateNumberService->create($plateNumberService->payloadFromTruck($truck));
+            $remoteId = $response['plateNumberId'] ?? null;
+            if ($remoteId) {
+                $truck->update(['api_vehicle_id' => $remoteId]);
+            }
+            return redirect()->back()->with('success', "Pushed '{$truck->plate}' to IMI" . ($remoteId ? " (ID {$remoteId})" : '') . '.');
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', "Failed to push '{$truck->plate}': " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Push every local truck that's not yet in the register.
+     */
+    public function pushAllPlateNumbers(PlateNumberService $plateNumberService)
+    {
+        $remote = [];
+        try {
+            $remote = collect($plateNumberService->all())->keyBy(fn ($r) => strtoupper(trim($r['plateNumber'] ?? '')));
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', 'Could not load existing plates: ' . $e->getMessage());
+        }
+
+        $trucks = Truck::where('user_id', auth()->id())
+            ->whereNotNull('registration_country')
+            ->whereNotNull('carriage_type')
+            ->orderBy('plate')->get();
+
+        $created = 0; $skipped = 0; $failed = 0;
+        $errors = [];
+
+        foreach ($trucks as $truck) {
+            $key = strtoupper(trim($truck->plate));
+            if (isset($remote[$key])) {
+                if (empty($truck->api_vehicle_id)) {
+                    $truck->update(['api_vehicle_id' => $remote[$key]['plateNumberId'] ?? null]);
+                }
+                $skipped++;
+                continue;
+            }
+            try {
+                $response = $plateNumberService->create($plateNumberService->payloadFromTruck($truck));
+                if (!empty($response['plateNumberId'])) {
+                    $truck->update(['api_vehicle_id' => $response['plateNumberId']]);
+                }
+                $created++;
+            } catch (\Throwable $e) {
+                $failed++;
+                $errors[] = "{$truck->plate}: " . $e->getMessage();
+            }
+        }
+
+        $msg = "Pushed {$created}, already registered {$skipped}, failed {$failed}.";
+        if (!empty($errors)) {
+            $msg .= ' Errors: ' . implode(' | ', array_slice($errors, 0, 3));
+        }
+        return redirect()->back()->with($failed === 0 ? 'success' : 'warning', $msg);
     }
 
     /**

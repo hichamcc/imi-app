@@ -31,6 +31,7 @@ return [
     'endpoints' => [
         'drivers' => '/drivers',
         'declarations' => '/declarations',
+        'plate_numbers' => '/plate-numbers',
     ],
 
     /*

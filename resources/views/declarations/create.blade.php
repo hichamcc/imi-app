@@ -98,48 +98,113 @@
                             <x-error for="declarationOperationType" />
                         </x-field>
 
-                        <!-- Transport Types -->
-                        <x-field>
-                            <x-label>{{ __('Transport Types') }} <span class="text-red-500">*</span></x-label>
-                            <div class="mt-2 space-y-2">
-                                @foreach($transportTypes as $key => $value)
-                                    <label class="flex items-center">
-                                        <input type="checkbox"
-                                               name="declarationTransportType[]"
-                                               value="{{ $key }}"
-                                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                               {{ in_array($key, old('declarationTransportType', [])) ? 'checked' : '' }}>
-                                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ __($value) }}</span>
-                                    </label>
-                                @endforeach
-                            </div>
-                            <x-error for="declarationTransportType" />
-                        </x-field>
-
-                        <!-- Vehicle Plate Numbers (Multiple Selection) -->
-                        <x-field class="md:col-span-2">
-                            <div class="flex items-center justify-between">
-                                <x-label>{{ __('Vehicle Plate Numbers') }} <span class="text-red-500">*</span></x-label>
-                                <div class="flex space-x-2">
-                                    <button type="button" onclick="selectAllPlates()" class="text-xs text-blue-600 hover:text-blue-800">{{ __('Select All') }}</button>
-                                    <button type="button" onclick="clearAllPlates()" class="text-xs text-gray-600 hover:text-gray-800">{{ __('Clear All') }}</button>
+                        <!-- Transport Types + plates: grouped under one Alpine scope so the plate sections show/hide -->
+                        <div class="md:col-span-2" x-data="{ types: @js(old('declarationTransportType', [])) }">
+                            <x-field>
+                                <x-label>{{ __('Transport Types') }} <span class="text-red-500">*</span></x-label>
+                                <div class="mt-2 space-y-2">
+                                    @foreach($transportTypes as $key => $value)
+                                        <label class="flex items-center">
+                                            <input type="checkbox"
+                                                   name="declarationTransportType[]"
+                                                   value="{{ $key }}"
+                                                   x-model="types"
+                                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ __($value) }}</span>
+                                        </label>
+                                    @endforeach
                                 </div>
+                                <x-error for="declarationTransportType" />
+                            </x-field>
+
+                            @if(($plateGroups['source'] ?? '') === 'local')
+                                <div class="mt-3 p-3 rounded border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-800 text-xs text-yellow-800 dark:text-yellow-300">
+                                    ⚠️ {{ __('Could not load the IMI plate-number register, showing local trucks instead. The API will reject plates not registered with') }} <code>/plate-numbers</code>.
+                                </div>
+                            @endif
+
+                            <!-- Heavy goods plates -->
+                            <div class="mt-6" x-show="types.includes('CARRIAGE_OF_GOODS')" x-cloak>
+                                <div class="flex items-center justify-between">
+                                    <x-label>{{ __('Heavy goods vehicles') }} <span class="text-xs text-gray-500">({{ count($plateGroups['goods_heavy']) }})</span></x-label>
+                                    <div class="flex space-x-2">
+                                        <button type="button" onclick="togglePlateGroup('heavy', true)" class="text-xs text-blue-600 hover:text-blue-800">{{ __('Select All') }}</button>
+                                        <button type="button" onclick="togglePlateGroup('heavy', false)" class="text-xs text-gray-600 hover:text-gray-800">{{ __('Clear') }}</button>
+                                    </div>
+                                </div>
+                                @if(count($plateGroups['goods_heavy']))
+                                    <div class="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                                        @foreach($plateGroups['goods_heavy'] as $p)
+                                            <label class="flex items-center">
+                                                <input type="checkbox" name="declarationVehiclePlateNumberHeavy[]" value="{{ $p['plate'] }}"
+                                                    class="plate-heavy rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                    {{ in_array($p['plate'], old('declarationVehiclePlateNumberHeavy', [])) ? 'checked' : '' }}>
+                                                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ $p['plate'] }} <span class="text-xs text-gray-500">{{ $p['country'] }}</span></span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <p class="mt-2 text-xs text-gray-500">{{ __('No heavy-goods plates registered yet.') }}</p>
+                                @endif
+                                <x-error for="declarationVehiclePlateNumberHeavy" />
                             </div>
-                            <div class="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-4" id="plates-container">
-                                @foreach($trucks as $truck)
-                                    <label class="flex items-center">
-                                        <input type="checkbox"
-                                               name="declarationVehiclePlateNumber[]"
-                                               value="{{ $truck->plate }}"
-                                               class="plate-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                               {{ in_array($truck->plate, old('declarationVehiclePlateNumber', [])) ? 'checked' : '' }}>
-                                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ $truck->plate }} - {{ $truck->name }}</span>
-                                    </label>
-                                @endforeach
+
+                            <!-- Light goods plates -->
+                            <div class="mt-6" x-show="types.includes('CARRIAGE_OF_GOODS')" x-cloak>
+                                <div class="flex items-center justify-between">
+                                    <x-label>{{ __('Light goods vehicles') }} <span class="text-xs text-gray-500">({{ count($plateGroups['goods_light']) }})</span></x-label>
+                                    <div class="flex space-x-2">
+                                        <button type="button" onclick="togglePlateGroup('light', true)" class="text-xs text-blue-600 hover:text-blue-800">{{ __('Select All') }}</button>
+                                        <button type="button" onclick="togglePlateGroup('light', false)" class="text-xs text-gray-600 hover:text-gray-800">{{ __('Clear') }}</button>
+                                    </div>
+                                </div>
+                                @if(count($plateGroups['goods_light']))
+                                    <div class="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                                        @foreach($plateGroups['goods_light'] as $p)
+                                            <label class="flex items-center">
+                                                <input type="checkbox" name="declarationVehiclePlateNumberLight[]" value="{{ $p['plate'] }}"
+                                                    class="plate-light rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                    {{ in_array($p['plate'], old('declarationVehiclePlateNumberLight', [])) ? 'checked' : '' }}>
+                                                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ $p['plate'] }} <span class="text-xs text-gray-500">{{ $p['country'] }}</span></span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <p class="mt-2 text-xs text-gray-500">{{ __('No light-goods plates registered yet.') }}</p>
+                                @endif
+                                <x-error for="declarationVehiclePlateNumberLight" />
                             </div>
-                            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ __('Select one or more vehicle plates for this declaration.') }}</p>
-                            <x-error for="declarationVehiclePlateNumber" />
-                        </x-field>
+
+                            <!-- Passenger plates -->
+                            <div class="mt-6" x-show="types.includes('CARRIAGE_OF_PASSENGERS')" x-cloak>
+                                <div class="flex items-center justify-between">
+                                    <x-label>{{ __('Passenger vehicles') }} <span class="text-xs text-gray-500">({{ count($plateGroups['passengers']) }})</span></x-label>
+                                    <div class="flex space-x-2">
+                                        <button type="button" onclick="togglePlateGroup('passenger', true)" class="text-xs text-blue-600 hover:text-blue-800">{{ __('Select All') }}</button>
+                                        <button type="button" onclick="togglePlateGroup('passenger', false)" class="text-xs text-gray-600 hover:text-gray-800">{{ __('Clear') }}</button>
+                                    </div>
+                                </div>
+                                @if(count($plateGroups['passengers']))
+                                    <div class="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                                        @foreach($plateGroups['passengers'] as $p)
+                                            <label class="flex items-center">
+                                                <input type="checkbox" name="declarationVehiclePlateNumber[]" value="{{ $p['plate'] }}"
+                                                    class="plate-passenger rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                    {{ in_array($p['plate'], old('declarationVehiclePlateNumber', [])) ? 'checked' : '' }}>
+                                                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{{ $p['plate'] }} <span class="text-xs text-gray-500">{{ $p['country'] }}</span></span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <p class="mt-2 text-xs text-gray-500">{{ __('No passenger plates registered yet.') }}</p>
+                                @endif
+                                <x-error for="declarationVehiclePlateNumber" />
+                            </div>
+
+                            <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                                {{ __('Plates are loaded from the IMI vehicle register. Register new plates under Trucks → Vehicle Registration.') }}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -232,19 +297,12 @@
             });
         }
 
-        // Plate selection functions
-        function selectAllPlates() {
-            const checkboxes = document.querySelectorAll('.plate-checkbox');
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = true;
-            });
-        }
-
-        function clearAllPlates() {
-            const checkboxes = document.querySelectorAll('.plate-checkbox');
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = false;
-            });
+        // Plate-group selection helpers
+        function togglePlateGroup(group, state) {
+            const cls = group === 'heavy' ? '.plate-heavy'
+                      : group === 'light' ? '.plate-light'
+                      : '.plate-passenger';
+            document.querySelectorAll(cls).forEach(cb => { cb.checked = state; });
         }
     </script>
 </x-layouts.app>

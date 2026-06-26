@@ -466,8 +466,13 @@ class DriverController extends Controller
                                 'declarationEndDate' => $fullDecl['declarationEndDate'] ?? null,
                                 'declarationOperationType' => $fullDecl['declarationOperationType'] ?? [],
                                 'declarationTransportType' => $fullDecl['declarationTransportType'] ?? [],
-                                'declarationVehiclePlateNumber' => $fullDecl['declarationVehiclePlateNumber'] ?? [],
                             ];
+                            // Carry forward whichever plate fields the source declaration used
+                            foreach (['declarationVehiclePlateNumber', 'declarationVehiclePlateNumberLight', 'declarationVehiclePlateNumberHeavy'] as $plateField) {
+                                if (!empty($fullDecl[$plateField])) {
+                                    $declData[$plateField] = $fullDecl[$plateField];
+                                }
+                            }
 
                             // Copy otherContact fields if present
                             foreach (['otherContactAsTransportManager', 'otherContactFirstName', 'otherContactLastName', 'otherContactEmail', 'otherContactPhone'] as $field) {
