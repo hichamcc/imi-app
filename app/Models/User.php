@@ -37,6 +37,7 @@ class User extends Authenticatable
         'company_email',
         'is_admin',
         'is_active',
+        'can_access_payroll',
     ];
 
     /**
@@ -62,7 +63,17 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_active' => 'boolean',
+            'can_access_payroll' => 'boolean',
         ];
+    }
+
+    /**
+     * True if the user can access the HR + Payroll modules (Persons, Payroll Imports, Payslips).
+     * Admins always have access regardless of the flag.
+     */
+    public function canAccessPayroll(): bool
+    {
+        return $this->isAdmin() || (bool) $this->can_access_payroll;
     }
 
     /**

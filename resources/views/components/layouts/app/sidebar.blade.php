@@ -45,20 +45,22 @@
                         </x-navlist.item>
                     </x-navlist.group>
 
-                    <x-navlist.group :heading="__('HR')">
-                        <x-navlist.item before="phosphor-identification-card" :href="route('persons.index')" :current="request()->routeIs('persons.*')">
-                            {{ __('Persons') }}
-                        </x-navlist.item>
-                    </x-navlist.group>
+                    @if(auth()->user()->canAccessPayroll())
+                        <x-navlist.group :heading="__('HR')">
+                            <x-navlist.item before="phosphor-identification-card" :href="route('persons.index')" :current="request()->routeIs('persons.*')">
+                                {{ __('Persons') }}
+                            </x-navlist.item>
+                        </x-navlist.group>
 
-                    <x-navlist.group :heading="__('Payroll')">
-                        <x-navlist.item before="phosphor-receipt" :href="route('payroll-imports.index')" :current="request()->routeIs('payroll-imports.*')">
-                            {{ __('Imports') }}
-                        </x-navlist.item>
-                        <x-navlist.item before="phosphor-money" :href="route('payslips.index')" :current="request()->routeIs('payslips.*')">
-                            {{ __('Payslips') }}
-                        </x-navlist.item>
-                    </x-navlist.group>
+                        <x-navlist.group :heading="__('Payroll')">
+                            <x-navlist.item before="phosphor-receipt" :href="route('payroll-imports.index')" :current="request()->routeIs('payroll-imports.*')">
+                                {{ __('Imports') }}
+                            </x-navlist.item>
+                            <x-navlist.item before="phosphor-money" :href="route('payslips.index')" :current="request()->routeIs('payslips.*')">
+                                {{ __('Payslips') }}
+                            </x-navlist.item>
+                        </x-navlist.group>
+                    @endif
                 @endif
 
             </x-navlist>

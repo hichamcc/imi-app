@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'api.credentials' => \App\Http\Middleware\EnsureApiCredentials::class,
             'admin' => \App\Http\Middleware\EnsureAdmin::class,
+            'payroll' => \App\Http\Middleware\EnsurePayrollAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

@@ -114,35 +114,40 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::post('trucks/{truck}/assign-driver', [TruckController::class, 'assignDriver'])->name('trucks.assign-driver');
     Route::delete('truck-assignments/{assignment}', [TruckController::class, 'unassignDriver'])->name('trucks.unassign-driver');
 
-    // HR — Person Routes
-    Route::post('persons/{person}/files', [PersonController::class, 'uploadFile'])->name('persons.files.upload');
-    Route::get('persons/{person}/files/{file}/download', [PersonController::class, 'downloadFile'])->name('persons.files.download');
-    Route::delete('persons/{person}/files/{file}', [PersonController::class, 'deleteFile'])->name('persons.files.destroy');
-    Route::post('persons/{person}/sync-to-imi', [PersonController::class, 'syncToImi'])->name('persons.sync-to-imi');
-    Route::post('persons/{person}/link-to-imi', [PersonController::class, 'linkToImiDriver'])->name('persons.link-to-imi');
-    Route::get('persons/{person}/contract.pdf', [PersonController::class, 'generateContract'])->name('persons.contract');
+    // HR + Payroll — gated by the 'payroll' middleware (admin OR users with can_access_payroll)
+    Route::middleware('payroll')->group(function () {
+        // HR — Person Routes
+        Route::post('persons/{person}/files', [PersonController::class, 'uploadFile'])->name('persons.files.upload');
+        Route::get('persons/{person}/files/{file}/download', [PersonController::class, 'downloadFile'])->name('persons.files.download');
+        Route::delete('persons/{person}/files/{file}', [PersonController::class, 'deleteFile'])->name('persons.files.destroy');
+        Route::post('persons/{person}/sync-to-imi', [PersonController::class, 'syncToImi'])->name('persons.sync-to-imi');
+        Route::post('persons/{person}/link-to-imi', [PersonController::class, 'linkToImiDriver'])->name('persons.link-to-imi');
+        Route::get('persons/{person}/contract.pdf', [PersonController::class, 'generateContract'])->name('persons.contract');
 
-    // Payroll imports
-    Route::get('payroll-imports', [PayrollImportController::class, 'index'])->name('payroll-imports.index');
-    Route::get('payroll-imports/create', [PayrollImportController::class, 'create'])->name('payroll-imports.create');
-    Route::post('payroll-imports', [PayrollImportController::class, 'store'])->name('payroll-imports.store');
-    Route::get('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'review'])->name('payroll-imports.review');
-    Route::put('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'updateReview'])->name('payroll-imports.review.update');
-    Route::delete('payroll-imports/{payrollImport}', [PayrollImportController::class, 'destroy'])->name('payroll-imports.destroy');
-    Route::post('payroll-imports/{payrollImport}/rows/{row}/create-person', [PayrollImportController::class, 'createPersonFromRow'])->name('payroll-imports.rows.create-person');
-    Route::post('payroll-imports/{payrollImport}/generate-payslips', [PayrollImportController::class, 'generatePayslips'])->name('payroll-imports.generate-payslips');
+        // Payroll imports
+        Route::get('payroll-imports', [PayrollImportController::class, 'index'])->name('payroll-imports.index');
+        Route::get('payroll-imports/create', [PayrollImportController::class, 'create'])->name('payroll-imports.create');
+        Route::post('payroll-imports', [PayrollImportController::class, 'store'])->name('payroll-imports.store');
+        Route::get('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'review'])->name('payroll-imports.review');
+        Route::put('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'updateReview'])->name('payroll-imports.review.update');
+        Route::delete('payroll-imports/{payrollImport}', [PayrollImportController::class, 'destroy'])->name('payroll-imports.destroy');
+        Route::post('payroll-imports/{payrollImport}/rows/{row}/create-person', [PayrollImportController::class, 'createPersonFromRow'])->name('payroll-imports.rows.create-person');
+        Route::post('payroll-imports/{payrollImport}/generate-payslips', [PayrollImportController::class, 'generatePayslips'])->name('payroll-imports.generate-payslips');
 
-    // Payslips
-    Route::get('payslips', [PayslipController::class, 'index'])->name('payslips.index');
-    Route::get('payslips/{payslip}/view', [PayslipController::class, 'view'])->name('payslips.view');
-    Route::get('payslips/{payslip}/download', [PayslipController::class, 'download'])->name('payslips.download');
-    Route::post('payslips/{payslip}/regenerate', [PayslipController::class, 'regenerate'])->name('payslips.regenerate');
-    Route::delete('payslips/{payslip}', [PayslipController::class, 'destroy'])->name('payslips.destroy');
-    Route::post('persons-refresh-imi-presence', [PersonController::class, 'refreshImiPresence'])->name('persons.refresh-imi-presence');
-    Route::get('persons-import-from-imi', [PersonController::class, 'importFromImiIndex'])->name('persons.import-from-imi');
-    Route::post('persons-import-from-imi', [PersonController::class, 'importFromImiOne'])->name('persons.import-from-imi.one');
-    Route::post('persons-import-from-imi/bulk', [PersonController::class, 'importFromImiBulk'])->name('persons.import-from-imi.bulk');
-    Route::resource('persons', PersonController::class);
+        // Payslips
+        Route::get('payslips', [PayslipController::class, 'index'])->name('payslips.index');
+        Route::get('payslips/{payslip}/view', [PayslipController::class, 'view'])->name('payslips.view');
+        Route::get('payslips/{payslip}/download', [PayslipController::class, 'download'])->name('payslips.download');
+        Route::post('payslips/{payslip}/regenerate', [PayslipController::class, 'regenerate'])->name('payslips.regenerate');
+        Route::delete('payslips/{payslip}', [PayslipController::class, 'destroy'])->name('payslips.destroy');
+
+        // Person — IMI presence / import flows
+        Route::post('persons-refresh-imi-presence', [PersonController::class, 'refreshImiPresence'])->name('persons.refresh-imi-presence');
+        Route::get('persons-import-from-imi', [PersonController::class, 'importFromImiIndex'])->name('persons.import-from-imi');
+        Route::post('persons-import-from-imi', [PersonController::class, 'importFromImiOne'])->name('persons.import-from-imi.one');
+        Route::post('persons-import-from-imi/bulk', [PersonController::class, 'importFromImiBulk'])->name('persons.import-from-imi.bulk');
+        Route::resource('persons', PersonController::class);
+    });
 
     // Driver Profile Routes
     Route::post('driver-profiles/update-email', [DriverProfileController::class, 'updateEmail'])->name('driver-profiles.update-email');

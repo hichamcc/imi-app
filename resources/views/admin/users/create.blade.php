@@ -86,6 +86,14 @@
                             </label>
                         </div>
                         <p class="text-sm text-gray-500 dark:text-gray-400 ml-6">{{ __('Inactive users cannot log in to the system') }}</p>
+
+                        <div class="flex items-center">
+                            <input id="can_access_payroll" name="can_access_payroll" type="checkbox" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" {{ old('can_access_payroll') ? 'checked' : '' }}>
+                            <label for="can_access_payroll" class="ml-2 block text-sm text-gray-900 dark:text-white">
+                                {{ __('Can access HR & Payroll module') }}
+                            </label>
+                        </div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 ml-6">{{ __('Grants access to Persons, Payroll Imports and Payslips. Admins always have access regardless of this flag.') }}</p>
                     </div>
                 </div>
 

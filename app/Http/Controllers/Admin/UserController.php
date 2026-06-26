@@ -65,6 +65,7 @@ class UserController extends Controller
             $validated['password'] = Hash::make($validated['password']);
             $validated['is_admin'] = $request->has('is_admin');
             $validated['is_active'] = $request->has('is_active');
+            $validated['can_access_payroll'] = $request->has('can_access_payroll');
             $validated['email_verified_at'] = now();
 
             \Log::info('About to create user', ['validated_data' => array_merge($validated, ['password' => '[HIDDEN]'])]);
@@ -141,6 +142,7 @@ class UserController extends Controller
         // Boolean fields
         $data['is_admin'] = $request->has('is_admin');
         $data['is_active'] = $request->has('is_active');
+        $data['can_access_payroll'] = $request->has('can_access_payroll');
 
         \Log::info('Data to update:', $data);
 

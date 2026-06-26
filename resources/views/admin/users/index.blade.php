@@ -61,15 +61,22 @@
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        @if($user->is_admin)
-                                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">
-                                                {{ __('Administrator') }}
-                                            </span>
-                                        @else
-                                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
-                                                {{ __('User') }}
-                                            </span>
-                                        @endif
+                                        <div class="flex flex-col gap-1">
+                                            @if($user->is_admin)
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 w-fit">
+                                                    {{ __('Administrator') }}
+                                                </span>
+                                            @else
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 w-fit">
+                                                    {{ __('User') }}
+                                                </span>
+                                            @endif
+                                            @if($user->can_access_payroll && !$user->is_admin)
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300 w-fit" title="{{ __('Can access HR & Payroll') }}">
+                                                    {{ __('+ Payroll') }}
+                                                </span>
+                                            @endif
+                                        </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         @if($user->is_active)
