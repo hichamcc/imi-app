@@ -7,6 +7,7 @@ use App\Models\PayrollImportRow;
 use App\Models\Person;
 use App\Services\BankFileParser;
 use App\Services\ImiPresenceLookup;
+use App\Services\PayslipGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -154,6 +155,84 @@ class PayrollImportController extends Controller
         $import = PayrollImport::where('user_id', auth()->id())->findOrFail($id);
         $import->delete();
         return redirect()->route('payroll-imports.index')->with('success', 'Import deleted.');
+    }
+
+    /**
+     * Create a stub Person from a single import row (uses parsed_name + IBAN if extractable).
+     * Then auto-match the row to that Person.
+     */
+    public function createPersonFromRow(string $importId, string $rowId)
+    {
+        $import = PayrollImport::where('user_id', auth()->id())->findOrFail($importId);
+        $row = $import->rows()->findOrFail($rowId);
+
+        if (!$row->parsed_name) {
+            return redirect()->back()->with('error', 'Cannot create a person: no name parsed from this row.');
+        }
+
+        $parts = preg_split('/\s+/', trim($row->parsed_name));
+        $first = $parts[0] ?? $row->parsed_name;
+        $last = count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : '';
+
+        $person = Person::create([
+            'user_id' => auth()->id(),
+            'first_name' => $first,
+            'last_name' => $last,
+            'position' => 'Driver',
+        ]);
+
+        $row->update(['matched_person_id' => $person->id]);
+
+        return redirect()->route('payroll-imports.review', $import->id)
+            ->with('success', "Created person “{$person->full_name}”. You can edit details from their profile later.");
+    }
+
+    /**
+     * Generate Payslip records + PDFs for every ticked row that has a matched person.
+     */
+    public function generatePayslips(string $id, PayslipGenerator $generator)
+    {
+        $import = PayrollImport::where('user_id', auth()->id())->findOrFail($id);
+        $rows = $import->rows()->where('is_payroll', true)->get();
+
+        if ($rows->isEmpty()) {
+            return redirect()->route('payroll-imports.review', $import->id)
+                ->with('error', 'No rows are ticked as payroll.');
+        }
+
+        $missingMatches = $rows->whereNull('matched_person_id');
+        if ($missingMatches->isNotEmpty()) {
+            return redirect()->route('payroll-imports.review', $import->id)
+                ->with('error', "Cannot generate — {$missingMatches->count()} ticked row(s) have no matched person. Click 'Create person' on those rows or edit the name to match an existing one.");
+        }
+
+        $created = 0;
+        $errors = [];
+
+        foreach ($rows as $row) {
+            try {
+                $person = Person::where('user_id', auth()->id())->findOrFail($row->matched_person_id);
+                $payslip = $generator->fromImportRow($row, $person, $import);
+                $generator->renderPdf($payslip, auth()->user());
+                $created++;
+            } catch (\Throwable $e) {
+                \Log::warning('Payslip generation failed', ['row_id' => $row->id, 'error' => $e->getMessage()]);
+                $errors[] = ($row->parsed_name ?? "Row #{$row->row_index}") . ': ' . $e->getMessage();
+            }
+        }
+
+        $import->update([
+            'status' => 'generated',
+            'payslips_generated' => $created,
+            'processed_at' => now(),
+        ]);
+
+        $msg = "{$created} payslip(s) generated.";
+        if (!empty($errors)) {
+            $msg .= ' Errors: ' . implode('; ', array_slice($errors, 0, 3));
+        }
+
+        return redirect()->route('payroll-imports.review', $import->id)->with('success', $msg);
     }
 
     // ---- helpers ----

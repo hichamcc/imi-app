@@ -5,6 +5,7 @@ use App\Http\Controllers\DeclarationController;
 use App\Http\Controllers\DriverController;
 use App\Http\Controllers\DriverProfileController;
 use App\Http\Controllers\PayrollImportController;
+use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\PersonController;
 use App\Http\Controllers\TruckController;
 use App\Http\Controllers\UserGroupController;
@@ -125,6 +126,15 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::get('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'review'])->name('payroll-imports.review');
     Route::put('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'updateReview'])->name('payroll-imports.review.update');
     Route::delete('payroll-imports/{payrollImport}', [PayrollImportController::class, 'destroy'])->name('payroll-imports.destroy');
+    Route::post('payroll-imports/{payrollImport}/rows/{row}/create-person', [PayrollImportController::class, 'createPersonFromRow'])->name('payroll-imports.rows.create-person');
+    Route::post('payroll-imports/{payrollImport}/generate-payslips', [PayrollImportController::class, 'generatePayslips'])->name('payroll-imports.generate-payslips');
+
+    // Payslips
+    Route::get('payslips', [PayslipController::class, 'index'])->name('payslips.index');
+    Route::get('payslips/{payslip}/view', [PayslipController::class, 'view'])->name('payslips.view');
+    Route::get('payslips/{payslip}/download', [PayslipController::class, 'download'])->name('payslips.download');
+    Route::post('payslips/{payslip}/regenerate', [PayslipController::class, 'regenerate'])->name('payslips.regenerate');
+    Route::delete('payslips/{payslip}', [PayslipController::class, 'destroy'])->name('payslips.destroy');
     Route::post('persons-refresh-imi-presence', [PersonController::class, 'refreshImiPresence'])->name('persons.refresh-imi-presence');
     Route::get('persons-import-from-imi', [PersonController::class, 'importFromImiIndex'])->name('persons.import-from-imi');
     Route::post('persons-import-from-imi', [PersonController::class, 'importFromImiOne'])->name('persons.import-from-imi.one');

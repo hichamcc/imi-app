@@ -8,10 +8,25 @@
                     @if($import->account_number) · <span class="font-mono text-xs">{{ $import->account_number }}</span>@endif
                 </p>
             </div>
-            <a href="{{ route('payroll-imports.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">{{ __('Back') }}</a>
+            <div class="flex gap-2">
+                @if($import->payslips_generated > 0)
+                    <span class="px-3 py-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 rounded-lg text-sm font-medium">
+                        {{ $import->payslips_generated }} {{ __('payslips generated') }}
+                    </span>
+                @endif
+                <form method="POST" action="{{ route('payroll-imports.generate-payslips', $import->id) }}"
+                      onsubmit="return confirm('{{ __('Generate payslips for every ticked row with a matched person? Existing payslips for the same row will be replaced.') }}')">
+                    @csrf
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">
+                        {{ __('Generate Payslips') }}
+                    </button>
+                </form>
+                <a href="{{ route('payroll-imports.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">{{ __('Back') }}</a>
+            </div>
         </div>
 
         @if(session('success'))<div class="bg-green-50 border border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300 px-4 py-3 rounded-lg">{{ session('success') }}</div>@endif
+        @if(session('error'))<div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg">{{ session('error') }}</div>@endif
 
         <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-200">
             <strong>{{ __('How this works') }}:</strong>
@@ -104,9 +119,17 @@
                                                 @endforeach
                                             </div>
                                         @elseif($row->parsed_name)
-                                            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" title="{{ __('Not found in local persons or any IMI org') }}">
-                                                ⚠️ {{ __('Missing') }}
-                                            </span>
+                                            <div class="space-y-1">
+                                                <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" title="{{ __('Not found in local persons or any IMI org') }}">
+                                                    ⚠️ {{ __('Missing') }}
+                                                </span>
+                                                <button form="create-person-{{ $row->id }}" type="submit" class="text-xs text-blue-600 hover:text-blue-800 underline">
+                                                    {{ __('Create person') }}
+                                                </button>
+                                                <form id="create-person-{{ $row->id }}" method="POST" action="{{ route('payroll-imports.rows.create-person', [$import->id, $row->id]) }}" class="hidden">
+                                                    @csrf
+                                                </form>
+                                            </div>
                                         @else
                                             <span class="text-xs text-gray-400">—</span>
                                         @endif

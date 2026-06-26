@@ -193,7 +193,8 @@ class PersonController extends Controller
     {
         $person = Person::where('user_id', auth()->id())->findOrFail($id);
         $files = $person->files()->latest()->get();
-        return view('persons.show', compact('person', 'files'));
+        $payslips = $person->payslips()->get();
+        return view('persons.show', compact('person', 'files', 'payslips'));
     }
 
     public function edit(string $id)

@@ -57,6 +57,11 @@ class Person extends Model
         return $this->hasMany(PersonFile::class);
     }
 
+    public function payslips(): HasMany
+    {
+        return $this->hasMany(Payslip::class)->latest('payroll_month');
+    }
+
     public function getFullNameAttribute(): string
     {
         return trim("{$this->first_name} {$this->last_name}");

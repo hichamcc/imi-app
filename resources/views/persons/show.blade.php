@@ -117,6 +117,39 @@
                         <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ $person->notes }}</p>
                     </div>
                 @endif
+
+                <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ __('Payslips') }}</h3>
+                    @if(($payslips ?? collect())->count() > 0)
+                        <table class="min-w-full text-sm">
+                            <thead class="text-xs text-gray-500 uppercase">
+                                <tr>
+                                    <th class="py-2 text-left">{{ __('Month') }}</th>
+                                    <th class="py-2 text-left">{{ __('Salary') }}</th>
+                                    <th class="py-2 text-left">{{ __('Per Diem') }}</th>
+                                    <th class="py-2 text-left">{{ __('Transfer') }}</th>
+                                    <th class="py-2 text-right">{{ __('Actions') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                @foreach($payslips as $p)
+                                    <tr>
+                                        <td class="py-2 text-gray-900 dark:text-white">{{ $p->payroll_month->format('M Y') }}</td>
+                                        <td class="py-2 text-gray-900 dark:text-white font-medium">{{ number_format($p->gross_salary, 2) }} {{ $p->currency }}</td>
+                                        <td class="py-2 text-gray-700 dark:text-gray-300">{{ number_format($p->per_diem, 2) }} {{ $p->currency }}</td>
+                                        <td class="py-2 text-gray-700 dark:text-gray-300">{{ number_format($p->transfer_amount, 2) }} {{ $p->currency }}</td>
+                                        <td class="py-2 text-right space-x-2 whitespace-nowrap">
+                                            <a href="{{ route('payslips.view', $p->id) }}" target="_blank" class="text-blue-600 hover:text-blue-900 text-xs">{{ __('View') }}</a>
+                                            <a href="{{ route('payslips.download', $p->id) }}" class="text-green-600 hover:text-green-900 text-xs">{{ __('Download') }}</a>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    @else
+                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('No payslips yet.') }}</p>
+                    @endif
+                </div>
             </div>
 
             {{-- File archive sidebar --}}
