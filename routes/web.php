@@ -132,6 +132,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
         Route::put('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'updateReview'])->name('payroll-imports.review.update');
         Route::delete('payroll-imports/{payrollImport}', [PayrollImportController::class, 'destroy'])->name('payroll-imports.destroy');
         Route::post('payroll-imports/{payrollImport}/rows/{row}/create-person', [PayrollImportController::class, 'createPersonFromRow'])->name('payroll-imports.rows.create-person');
+        Route::post('payroll-imports/{payrollImport}/create-all-missing-persons', [PayrollImportController::class, 'createAllMissingPersons'])->name('payroll-imports.create-all-missing-persons');
         Route::post('payroll-imports/{payrollImport}/generate-payslips', [PayrollImportController::class, 'generatePayslips'])->name('payroll-imports.generate-payslips');
 
         // Payslips

@@ -115,6 +115,8 @@ class PayrollImportController extends Controller
 
     /**
      * Persist the user's tweaks to the rows (which to import, name corrections, person matches).
+     * Re-attempts the local-person lookup using the (possibly edited) name so corrected typos
+     * actually associate with an existing Person without needing to "Create person" manually.
      */
     public function updateReview(Request $request, string $id)
     {
@@ -128,26 +130,98 @@ class PayrollImportController extends Controller
         ]);
 
         $input = $request->input('rows', []);
+        $personLookup = $this->buildLocalPersonLookup();
+        $rematched = 0;
 
         foreach ($import->rows as $row) {
             $key = (string) $row->id;
             if (!isset($input[$key])) {
-                // Unticked rows aren't sent in the form; treat as not payroll
                 $row->update(['is_payroll' => false]);
                 continue;
             }
 
+            $newName = $input[$key]['parsed_name'] ?? $row->parsed_name;
+            $newMatch = $input[$key]['matched_person_id'] ?? $row->matched_person_id;
+
+            // If no explicit match was supplied, try to auto-resolve from the edited name
+            if (empty($newMatch) && !empty($newName)) {
+                $candidate = $personLookup[strtolower(trim($newName))] ?? null;
+                if ($candidate) {
+                    $newMatch = $candidate;
+                    $rematched++;
+                }
+            }
+
             $row->update([
                 'is_payroll' => (bool) ($input[$key]['is_payroll'] ?? false),
-                'parsed_name' => $input[$key]['parsed_name'] ?? $row->parsed_name,
-                'matched_person_id' => $input[$key]['matched_person_id'] ?? $row->matched_person_id,
+                'parsed_name' => $newName,
+                'matched_person_id' => $newMatch,
             ]);
         }
 
         $import->update(['status' => 'reviewed']);
 
+        $msg = 'Review saved.';
+        if ($rematched > 0) {
+            $msg .= " {$rematched} row(s) auto-matched to an existing person from your HR records.";
+        }
+
+        return redirect()->route('payroll-imports.review', $import->id)->with('success', $msg);
+    }
+
+    /**
+     * Bulk-create Person stubs for every ticked row that has a parsed_name but no
+     * matched person yet. Lets the user go straight from upload → generate without
+     * clicking "Create person" 11 times.
+     */
+    public function createAllMissingPersons(string $id)
+    {
+        $import = PayrollImport::where('user_id', auth()->id())->findOrFail($id);
+
+        $rows = $import->rows()
+            ->where('is_payroll', true)
+            ->whereNull('matched_person_id')
+            ->whereNotNull('parsed_name')
+            ->where('parsed_name', '!=', '')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return redirect()->route('payroll-imports.review', $import->id)
+                ->with('info', 'No missing persons to create — every ticked row is already matched.');
+        }
+
+        $personLookup = $this->buildLocalPersonLookup();
+        $created = 0;
+        $matched = 0;
+
+        foreach ($rows as $row) {
+            $key = strtolower(trim($row->parsed_name));
+
+            // Defensive: if a Person with that exact name was created during this loop, reuse it
+            if (isset($personLookup[$key])) {
+                $row->update(['matched_person_id' => $personLookup[$key]]);
+                $matched++;
+                continue;
+            }
+
+            $parts = preg_split('/\s+/', trim($row->parsed_name));
+            $first = $parts[0] ?? $row->parsed_name;
+            $last = count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : '';
+
+            $person = Person::create([
+                'user_id' => auth()->id(),
+                'first_name' => $first,
+                'last_name' => $last,
+                'position' => 'Driver',
+            ]);
+
+            $row->update(['matched_person_id' => $person->id]);
+            $personLookup[$key] = $person->id;
+            $created++;
+        }
+
         return redirect()->route('payroll-imports.review', $import->id)
-            ->with('success', 'Review saved. Ready to generate payslips (next PR).');
+            ->with('success', "Created {$created} person(s)" . ($matched > 0 ? " ({$matched} additionally auto-matched)" : '') . ". You can now generate payslips.");
     }
 
     public function destroy(string $id)
@@ -202,8 +276,9 @@ class PayrollImportController extends Controller
 
         $missingMatches = $rows->whereNull('matched_person_id');
         if ($missingMatches->isNotEmpty()) {
+            $n = $missingMatches->count();
             return redirect()->route('payroll-imports.review', $import->id)
-                ->with('error', "Cannot generate — {$missingMatches->count()} ticked row(s) have no matched person. Click 'Create person' on those rows or edit the name to match an existing one.");
+                ->with('error', "Cannot generate — {$n} ticked row(s) have no matched person. Click the green “Create {$n} missing person(s)” button above to create stubs for all of them at once, or edit individual names to match existing HR records.");
         }
 
         $created = 0;

@@ -8,11 +8,26 @@
                     @if($import->account_number) · <span class="font-mono text-xs">{{ $import->account_number }}</span>@endif
                 </p>
             </div>
+            @php
+                $missingMatchCount = $rows->where('is_payroll', true)
+                    ->whereNull('matched_person_id')
+                    ->filter(fn ($r) => !empty($r->parsed_name))
+                    ->count();
+            @endphp
             <div class="flex gap-2">
                 @if($import->payslips_generated > 0)
                     <span class="px-3 py-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 rounded-lg text-sm font-medium">
                         {{ $import->payslips_generated }} {{ __('payslips generated') }}
                     </span>
+                @endif
+                @if($missingMatchCount > 0)
+                    <form method="POST" action="{{ route('payroll-imports.create-all-missing-persons', $import->id) }}"
+                          onsubmit="return confirm('{{ __('Create person stubs for') }} {{ $missingMatchCount }} {{ __('row(s) that have no matched person? You can edit their details from the Persons page later.') }}')">
+                        @csrf
+                        <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium">
+                            {{ __('Create :n missing person(s)', ['n' => $missingMatchCount]) }}
+                        </button>
+                    </form>
                 @endif
                 <form method="POST" action="{{ route('payroll-imports.generate-payslips', $import->id) }}"
                       onsubmit="return confirm('{{ __('Generate payslips for every ticked row with a matched person? Existing payslips for the same row will be replaced.') }}')">
@@ -26,7 +41,14 @@
         </div>
 
         @if(session('success'))<div class="bg-green-50 border border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300 px-4 py-3 rounded-lg">{{ session('success') }}</div>@endif
+        @if(session('info'))<div class="bg-blue-50 border border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300 px-4 py-3 rounded-lg">{{ session('info') }}</div>@endif
         @if(session('error'))<div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg">{{ session('error') }}</div>@endif
+
+        @if($missingMatchCount > 0)
+            <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg text-sm">
+                ⚠️ <strong>{{ $missingMatchCount }}</strong> {{ __('ticked row(s) have no matched person. Click') }} <strong>"{{ __('Create :n missing person(s)', ['n' => $missingMatchCount]) }}"</strong> {{ __('above to auto-create stub records for all of them at once, or edit each name below to match an existing HR record.') }}
+            </div>
+        @endif
 
         <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-200">
             <strong>{{ __('How this works') }}:</strong>
