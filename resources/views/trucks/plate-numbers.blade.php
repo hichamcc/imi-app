@@ -107,7 +107,8 @@
                                 $plateKey = strtoupper(trim($r['plateNumber'] ?? ''));
                                 $localTruck = $localByPlate[$plateKey] ?? null;
 
-                                $apiTransport = $r['transportType']
+                                $apiTransport = $r['plateNumberTransportType']
+                                    ?? $r['transportType']
                                     ?? $r['transport_type']
                                     ?? $r['carriageType']
                                     ?? $r['carriage_type']

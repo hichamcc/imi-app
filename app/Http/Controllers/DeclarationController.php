@@ -46,7 +46,11 @@ class DeclarationController extends Controller
                 ];
                 if (!$entry['plate']) continue;
 
-                $type = $p['transportType'] ?? null;
+                // The live RTPD API returns `plateNumberTransportType` in list responses
+                // (not `transportType` as the OpenAPI example suggests). Check both.
+                $type = $p['plateNumberTransportType']
+                    ?? $p['transportType']
+                    ?? null;
                 $weight = $p['vehicleWeight'] ?? '';
 
                 if ($type === 'CARRIAGE_OF_PASSENGERS') {

@@ -388,12 +388,6 @@ class TruckController extends Controller
         $remote = [];
         try {
             $remote = $plateNumberService->all();
-            if (!empty($remote)) {
-                \Log::info('IMI /plate-numbers: first item keys', [
-                    'keys' => array_keys($remote[0]),
-                    'sample' => $remote[0],
-                ]);
-            }
         } catch (\Throwable $e) {
             $error = $e->getMessage();
         }

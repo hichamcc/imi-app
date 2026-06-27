@@ -254,13 +254,14 @@ class DeclarationService
     }
 
     /**
-     * Get transport types
+     * Get transport types — values match the API enum exactly; labels are the
+     * short forms used consistently across the UI (trucks, plate register, etc.)
      */
     public static function getTransportTypes(): array
     {
         return [
-            'CARRIAGE_OF_GOODS' => 'Carriage of Goods',
-            'CARRIAGE_OF_PASSENGERS' => 'Carriage of Passengers'
+            'CARRIAGE_OF_GOODS' => 'Goods',
+            'CARRIAGE_OF_PASSENGERS' => 'Passengers',
         ];
     }
 
