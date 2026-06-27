@@ -89,17 +89,60 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ __('Country') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ __('Transport') }}</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ __('Weight') }}</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ __('ID') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ __('IMI ID') }}</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">{{ __('Actions') }}</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 text-sm">
                         @foreach($remote as $r)
+                            @php
+                                // Resolve transport / weight defensively — the API may return
+                                // legacy records with the field missing, snake_case, or under
+                                // an older name.
+                                $transport = $r['transportType']
+                                    ?? $r['transport_type']
+                                    ?? $r['carriageType']
+                                    ?? $r['carriage_type']
+                                    ?? null;
+                                $weight = $r['vehicleWeight']
+                                    ?? $r['vehicle_weight']
+                                    ?? $r['weightType']
+                                    ?? $r['weight_type']
+                                    ?? null;
+                                $transportLabel = match ($transport) {
+                                    'CARRIAGE_OF_PASSENGERS' => __('Passengers'),
+                                    'CARRIAGE_OF_GOODS' => __('Goods'),
+                                    null, '' => __('— unset —'),
+                                    default => $transport,
+                                };
+                                $plateId = $r['plateNumberId'] ?? $r['plate_number_id'] ?? '';
+                            @endphp
                             <tr>
                                 <td class="px-6 py-3 font-mono text-gray-900 dark:text-white">{{ $r['plateNumber'] ?? '' }}</td>
                                 <td class="px-6 py-3">{{ $r['registrationCountry'] ?? '—' }}</td>
-                                <td class="px-6 py-3 text-xs">{{ ($r['transportType'] ?? '') === 'CARRIAGE_OF_PASSENGERS' ? __('Passengers') : (($r['transportType'] ?? '') === 'CARRIAGE_OF_GOODS' ? __('Goods') : '—') }}</td>
-                                <td class="px-6 py-3 text-xs">{{ $r['vehicleWeight'] ?? '—' }}</td>
-                                <td class="px-6 py-3 text-xs font-mono text-gray-500">{{ \Illuminate\Support\Str::limit($r['plateNumberId'] ?? '', 14) }}</td>
+                                <td class="px-6 py-3 text-xs">
+                                    @if($transport === null || $transport === '')
+                                        <span class="text-gray-400 italic" title="{{ __('Field missing in API response — may be a legacy record') }}">{{ $transportLabel }}</span>
+                                    @else
+                                        {{ $transportLabel }}
+                                    @endif
+                                </td>
+                                <td class="px-6 py-3 text-xs">{{ $weight ?: '—' }}</td>
+                                <td class="px-6 py-3 text-xs font-mono text-gray-500" title="{{ $plateId }}">{{ \Illuminate\Support\Str::limit($plateId, 14) }}</td>
+                                <td class="px-6 py-3 text-right">
+                                    @if($plateId)
+                                        <form method="POST" action="{{ route('trucks.plate-numbers.delete') }}" class="inline"
+                                              onsubmit="return confirm('{{ __('Permanently delete') }} \'{{ $r['plateNumber'] ?? '' }}\' {{ __('from the IMI register? Declarations referencing this plate will be rejected by the API.') }}')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <input type="hidden" name="plate_number_id" value="{{ $plateId }}">
+                                            <input type="hidden" name="plate" value="{{ $r['plateNumber'] ?? '' }}">
+                                            <button type="submit" class="text-red-600 hover:text-red-900 dark:text-red-400 text-xs font-medium">{{ __('Delete from IMI') }}</button>
+                                        </form>
+                                    @else
+                                        <span class="text-xs text-gray-400">—</span>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>

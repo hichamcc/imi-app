@@ -388,6 +388,14 @@ class TruckController extends Controller
         $remote = [];
         try {
             $remote = $plateNumberService->all();
+            // Diagnostic: log the keys returned by the API so we can spot
+            // mismatched field names (e.g. older API rev, snake_case, etc.)
+            if (!empty($remote)) {
+                \Log::info('IMI /plate-numbers: first item keys', [
+                    'keys' => array_keys($remote[0]),
+                    'sample' => $remote[0],
+                ]);
+            }
         } catch (\Throwable $e) {
             $error = $e->getMessage();
         }
@@ -433,6 +441,32 @@ class TruckController extends Controller
         } catch (\Throwable $e) {
             return redirect()->back()->with('error', "Failed to push '{$truck->plate}': " . $e->getMessage());
         }
+    }
+
+    /**
+     * Delete a plate-number record from the IMI register. Also clears the
+     * api_vehicle_id on any local truck that was linked to it.
+     */
+    public function deletePlateNumber(Request $request, PlateNumberService $plateNumberService)
+    {
+        $validated = $request->validate([
+            'plate_number_id' => 'required|string',
+            'plate' => 'nullable|string',
+        ]);
+
+        try {
+            $plateNumberService->delete($validated['plate_number_id']);
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', 'Failed to delete from IMI: ' . $e->getMessage());
+        }
+
+        // Clear the link on any local truck pointing at the deleted IMI record
+        Truck::where('user_id', auth()->id())
+            ->where('api_vehicle_id', $validated['plate_number_id'])
+            ->update(['api_vehicle_id' => null]);
+
+        $label = $validated['plate'] ?? $validated['plate_number_id'];
+        return redirect()->back()->with('success', "Deleted '{$label}' from the IMI register.");
     }
 
     /**
