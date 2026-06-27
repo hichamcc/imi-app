@@ -24,10 +24,28 @@
               class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-6 max-w-2xl">
             @csrf
 
-            <div>
+            <div x-data="{ filename: '', size: 0 }">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ __('Bank Statement File') }} *</label>
-                <input type="file" name="file" accept=".xlsx,.xls,.csv" required class="block w-full text-sm">
-                <p class="mt-1 text-xs text-gray-500">{{ __('Max 10 MB. Headers expected: Account Number, Date, Description, Debit, Credit, Balance.') }}</p>
+                <label for="bank_file_input"
+                       class="flex flex-col items-center justify-center w-full px-4 py-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 dark:bg-gray-700/40 dark:hover:bg-gray-700/70 transition-colors">
+                    <svg class="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                              d="M7 16a4 4 0 01-.88-7.9 5 5 0 019.9-1A5.5 5.5 0 0118 16h-1m-6-4l-2 2m0 0l-2-2m2 2V4"></path>
+                    </svg>
+                    <p class="text-sm text-gray-700 dark:text-gray-300">
+                        <span x-show="!filename" class="font-medium text-blue-600 dark:text-blue-400">{{ __('Click to choose a file') }}</span>
+                        <span x-show="!filename" class="text-gray-500"> {{ __('or drag and drop') }}</span>
+                        <span x-show="filename" x-cloak class="font-medium text-gray-900 dark:text-white" x-text="filename"></span>
+                    </p>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <span x-show="!filename">.xlsx · .xls · .csv — {{ __('max 10 MB') }}</span>
+                        <span x-show="filename" x-cloak x-text="(size / 1024).toFixed(1) + ' KB'"></span>
+                    </p>
+                    <input id="bank_file_input" type="file" name="file" accept=".xlsx,.xls,.csv" required
+                           class="sr-only"
+                           x-on:change="filename = $event.target.files[0]?.name || ''; size = $event.target.files[0]?.size || 0">
+                </label>
+                <p class="mt-2 text-xs text-gray-500">{{ __('Expected columns: Account Number, Date, Description, Debit, Credit, Balance.') }}</p>
                 @error('file')<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@enderror
             </div>
 
