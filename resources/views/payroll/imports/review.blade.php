@@ -45,8 +45,16 @@
         @if(session('error'))<div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg">{{ session('error') }}</div>@endif
 
         @if($missingMatchCount > 0)
-            <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg text-sm">
-                ⚠️ <strong>{{ $missingMatchCount }}</strong> {{ __('ticked row(s) have no matched person. Click') }} <strong>"{{ __('Create :n missing person(s)', ['n' => $missingMatchCount]) }}"</strong> {{ __('above to auto-create stub records for all of them at once, or edit each name below to match an existing HR record.') }}
+            <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg text-sm space-y-2">
+                <div>
+                    ⚠️ <strong>{{ $missingMatchCount }}</strong> {{ __('ticked row(s) have no matched person.') }}
+                </div>
+                <div class="text-xs">
+                    {{ __('Recommended:') }}
+                    <a href="{{ route('persons.import-from-imi') }}" class="font-medium underline hover:no-underline">{{ __('Import drivers from IMI first') }}</a>
+                    {{ __('— they will be matched automatically when you come back here.') }}
+                    {{ __('Or, as a quick fallback, click the green') }} <strong>"{{ __('Create :n missing person(s)', ['n' => $missingMatchCount]) }}"</strong> {{ __('button above to create stub HR records for them.') }}
+                </div>
             </div>
         @endif
 

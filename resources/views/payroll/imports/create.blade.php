@@ -12,6 +12,14 @@
             <div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg">{{ session('error') }}</div>
         @endif
 
+        <div class="bg-blue-50 border border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300 px-4 py-3 rounded-lg text-sm">
+            💡 <strong>{{ __('Tip') }}:</strong>
+            {{ __('Before uploading the bank file, make sure your drivers exist as HR Persons so the importer can match them automatically.') }}
+            <a href="{{ route('persons.import-from-imi') }}" class="font-medium underline hover:no-underline">{{ __('Import drivers from IMI now') }}</a>
+            {{ __('or') }}
+            <a href="{{ route('persons.index') }}" class="font-medium underline hover:no-underline">{{ __('view existing persons') }}</a>.
+        </div>
+
         <form method="POST" action="{{ route('payroll-imports.store') }}" enctype="multipart/form-data"
               class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-6 max-w-2xl">
             @csrf
