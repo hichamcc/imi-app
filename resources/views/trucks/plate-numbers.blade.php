@@ -81,6 +81,14 @@
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 font-medium text-gray-700 dark:text-gray-200">
                 {{ __('IMI register') }} ({{ count($remote) }})
             </div>
+            <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 flex justify-between items-center">
+                <span>{{ __('The API list endpoint may omit some fields (legacy records). Values shown in') }} <span class="text-blue-600 dark:text-blue-400 font-medium">{{ __('blue') }}</span> {{ __('come from the matching local truck.') }}</span>
+                @if($debug)
+                    <a href="{{ route('trucks.plate-numbers') }}" class="text-red-600 hover:underline">{{ __('Hide raw') }}</a>
+                @else
+                    <a href="{{ route('trucks.plate-numbers', ['debug' => 1]) }}" class="text-blue-600 hover:underline">{{ __('Show raw API response') }}</a>
+                @endif
+            </div>
             @if(count($remote))
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead class="bg-gray-50 dark:bg-gray-900">
@@ -96,19 +104,35 @@
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 text-sm">
                         @foreach($remote as $r)
                             @php
-                                // Resolve transport / weight defensively — the API may return
-                                // legacy records with the field missing, snake_case, or under
-                                // an older name.
-                                $transport = $r['transportType']
+                                $plateKey = strtoupper(trim($r['plateNumber'] ?? ''));
+                                $localTruck = $localByPlate[$plateKey] ?? null;
+
+                                $apiTransport = $r['transportType']
                                     ?? $r['transport_type']
                                     ?? $r['carriageType']
                                     ?? $r['carriage_type']
                                     ?? null;
-                                $weight = $r['vehicleWeight']
+                                $apiWeight = $r['vehicleWeight']
                                     ?? $r['vehicle_weight']
                                     ?? $r['weightType']
                                     ?? $r['weight_type']
                                     ?? null;
+
+                                // Fall back to local truck data when API value is missing
+                                $transportFromLocal = false;
+                                $transport = $apiTransport;
+                                if (($transport === null || $transport === '') && $localTruck) {
+                                    $transport = $localTruck->carriage_type;
+                                    $transportFromLocal = true;
+                                }
+
+                                $weightFromLocal = false;
+                                $weight = $apiWeight;
+                                if (($weight === null || $weight === '') && $localTruck) {
+                                    $weight = $localTruck->weight_type;
+                                    $weightFromLocal = true;
+                                }
+
                                 $transportLabel = match ($transport) {
                                     'CARRIAGE_OF_PASSENGERS' => __('Passengers'),
                                     'CARRIAGE_OF_GOODS' => __('Goods'),
@@ -122,12 +146,22 @@
                                 <td class="px-6 py-3">{{ $r['registrationCountry'] ?? '—' }}</td>
                                 <td class="px-6 py-3 text-xs">
                                     @if($transport === null || $transport === '')
-                                        <span class="text-gray-400 italic" title="{{ __('Field missing in API response — may be a legacy record') }}">{{ $transportLabel }}</span>
+                                        <span class="text-gray-400 italic" title="{{ __('Field missing in API response — and no local truck to fall back to') }}">{{ $transportLabel }}</span>
+                                    @elseif($transportFromLocal)
+                                        <span class="text-blue-600 dark:text-blue-400" title="{{ __('From local truck (API omitted this field)') }}">{{ $transportLabel }} *</span>
                                     @else
                                         {{ $transportLabel }}
                                     @endif
                                 </td>
-                                <td class="px-6 py-3 text-xs">{{ $weight ?: '—' }}</td>
+                                <td class="px-6 py-3 text-xs">
+                                    @if($weight === null || $weight === '')
+                                        <span class="text-gray-400 italic">—</span>
+                                    @elseif($weightFromLocal)
+                                        <span class="text-blue-600 dark:text-blue-400" title="{{ __('From local truck (API omitted this field)') }}">{{ $weight }} *</span>
+                                    @else
+                                        {{ $weight }}
+                                    @endif
+                                </td>
                                 <td class="px-6 py-3 text-xs font-mono text-gray-500" title="{{ $plateId }}">{{ \Illuminate\Support\Str::limit($plateId, 14) }}</td>
                                 <td class="px-6 py-3 text-right">
                                     @if($plateId)
@@ -144,6 +178,13 @@
                                     @endif
                                 </td>
                             </tr>
+                            @if($debug)
+                                <tr class="bg-gray-50 dark:bg-gray-900/40">
+                                    <td colspan="6" class="px-6 py-2">
+                                        <pre class="text-xs text-gray-700 dark:text-gray-300 overflow-x-auto">{{ json_encode($r, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+                                    </td>
+                                </tr>
+                            @endif
                         @endforeach
                     </tbody>
                 </table>

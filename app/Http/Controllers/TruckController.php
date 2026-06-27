@@ -382,14 +382,12 @@ class TruckController extends Controller
     /**
      * Show the IMI plate-number register page + sync controls.
      */
-    public function plateNumbers(PlateNumberService $plateNumberService)
+    public function plateNumbers(Request $request, PlateNumberService $plateNumberService)
     {
         $error = null;
         $remote = [];
         try {
             $remote = $plateNumberService->all();
-            // Diagnostic: log the keys returned by the API so we can spot
-            // mismatched field names (e.g. older API rev, snake_case, etc.)
             if (!empty($remote)) {
                 \Log::info('IMI /plate-numbers: first item keys', [
                     'keys' => array_keys($remote[0]),
@@ -408,13 +406,22 @@ class TruckController extends Controller
 
         $localTrucks = Truck::where('user_id', auth()->id())->orderBy('plate')->get();
 
+        // Index local trucks by plate (upper) for fallback enrichment of API rows
+        $localByPlate = [];
+        foreach ($localTrucks as $t) {
+            $key = strtoupper(trim($t->plate));
+            if ($key !== '') $localByPlate[$key] = $t;
+        }
+
         // Mark each local truck as already in the API register or not
         $localTrucks->each(function (Truck $t) use ($remoteByPlate) {
             $key = strtoupper(trim($t->plate));
             $t->api_match = $remoteByPlate[$key] ?? null;
         });
 
-        return view('trucks.plate-numbers', compact('remote', 'error', 'localTrucks'));
+        $debug = $request->boolean('debug');
+
+        return view('trucks.plate-numbers', compact('remote', 'error', 'localTrucks', 'localByPlate', 'debug'));
     }
 
     /**
