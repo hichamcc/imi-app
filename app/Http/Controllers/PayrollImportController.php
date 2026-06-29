@@ -292,6 +292,13 @@ class PayrollImportController extends Controller
             $this->persistReviewState($import, $request);
         }
 
+        $request->validate([
+            'generation_date' => 'nullable|date',
+        ]);
+        $generatedDate = $request->filled('generation_date')
+            ? \Carbon\Carbon::parse($request->input('generation_date'))
+            : null;
+
         $rows = $import->rows()->where('is_payroll', true)->get();
 
         if ($rows->isEmpty()) {
@@ -312,7 +319,7 @@ class PayrollImportController extends Controller
         foreach ($rows as $row) {
             try {
                 $person = Person::where('user_id', auth()->id())->findOrFail($row->matched_person_id);
-                $payslip = $generator->fromImportRow($row, $person, $import);
+                $payslip = $generator->fromImportRow($row, $person, $import, $generatedDate);
                 $generator->renderPdf($payslip, auth()->user());
                 $created++;
             } catch (\Throwable $e) {

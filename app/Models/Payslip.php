@@ -19,6 +19,7 @@ class Payslip extends Model
         'bank_swift',
         'payroll_month',
         'payment_date',
+        'generated_date',
         'currency',
         'transfer_amount',
         'gross_salary',
@@ -35,6 +36,7 @@ class Payslip extends Model
     protected $casts = [
         'payroll_month' => 'date',
         'payment_date' => 'date',
+        'generated_date' => 'date',
         'pdf_generated_at' => 'datetime',
         'transfer_amount' => 'decimal:2',
         'gross_salary' => 'decimal:2',

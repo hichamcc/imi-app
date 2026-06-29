@@ -41,7 +41,7 @@
 
 <hr class="thick">
 
-<div class="right"><strong>Generated Date:</strong> {{ now()->format('d/m/Y') }}</div>
+<div class="right"><strong>Generated Date:</strong> {{ ($payslip->generated_date ?? now())->format('d/m/Y') }}</div>
 
 <div class="meta">
     <div><strong>Month:</strong> {{ $payslip->payroll_month->format('F Y') }}</div>

@@ -13,14 +13,21 @@ class PayslipGenerator
 {
     /**
      * Create (or refresh) a Payslip from a parsed bank-file row + matched person.
+     *
+     * @param  string|\DateTimeInterface|null  $generatedDateOverride  user-chosen date shown
+     *         as the "Generated Date" on every payslip in a batch. Does NOT affect the
+     *         Payment Date, which always reflects the actual bank transaction date.
      */
-    public function fromImportRow(PayrollImportRow $row, Person $person, PayrollImport $import): Payslip
-    {
+    public function fromImportRow(
+        PayrollImportRow $row,
+        Person $person,
+        PayrollImport $import,
+        $generatedDateOverride = null,
+    ): Payslip {
         $transfer = (float) $row->debit;
         $perDiem = Payslip::calcPerDiem($transfer);
         $salary = Payslip::calcSalary($transfer);
 
-        // Idempotent: re-use existing payslip for the same (person, month, import-row) tuple
         $payslip = Payslip::firstOrNew([
             'payroll_import_row_id' => $row->id,
             'person_id' => $person->id,
@@ -35,6 +42,7 @@ class PayslipGenerator
             'bank_swift' => $person->bank_swift,
             'payroll_month' => $import->payroll_month,
             'payment_date' => $row->date ?? $import->payroll_month,
+            'generated_date' => $generatedDateOverride,
             'currency' => $import->currency ?: 'EUR',
             'transfer_amount' => $transfer,
             'gross_salary' => $salary,

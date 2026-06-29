@@ -22,12 +22,22 @@
                         {{ __('Create') }} <span x-text="missingMatchCount"></span> {{ __('missing person(s)') }}
                     </button>
                 </form>
+                {{-- Generation date applied to every payslip in this batch. --}}
+                <div class="flex items-center">
+                    <label for="generation_date" class="text-xs text-gray-600 dark:text-gray-400 mr-2 whitespace-nowrap">{{ __('Generation date') }}</label>
+                    <input type="date"
+                           id="generation_date"
+                           name="generation_date"
+                           form="reviewForm"
+                           value="{{ now()->format('Y-m-d') }}"
+                           class="rounded-lg border border-gray-200 px-2 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                </div>
                 {{-- Submits the *review* form (below) so the latest checkbox state is
                      persisted before the generate handler runs. --}}
                 <button type="submit"
                         form="reviewForm"
                         formaction="{{ route('payroll-imports.generate-payslips', $import->id) }}"
-                        onclick="return confirm('{{ __('Generate payslips for every ticked row with a matched person? Existing payslips for the same row will be replaced.') }}')"
+                        onclick="return confirm('{{ __('Generate payslips for every ticked row with a matched person, dated:') }} ' + document.getElementById('generation_date').value + '?\n\n{{ __('Existing payslips for the same row will be replaced.') }}')"
                         class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">
                     {{ __('Generate Payslips') }}
                 </button>
