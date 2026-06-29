@@ -133,6 +133,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
         Route::post('payroll-imports', [PayrollImportController::class, 'store'])->name('payroll-imports.store');
         Route::get('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'review'])->name('payroll-imports.review');
         Route::put('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'updateReview'])->name('payroll-imports.review.update');
+        Route::post('payroll-imports/{payrollImport}/review', [PayrollImportController::class, 'updateReview'])->name('payroll-imports.review.update.post');
         Route::delete('payroll-imports/{payrollImport}', [PayrollImportController::class, 'destroy'])->name('payroll-imports.destroy');
         Route::post('payroll-imports/{payrollImport}/rows/{row}/create-person', [PayrollImportController::class, 'createPersonFromRow'])->name('payroll-imports.rows.create-person');
         Route::post('payroll-imports/{payrollImport}/create-all-missing-persons', [PayrollImportController::class, 'createAllMissingPersons'])->name('payroll-imports.create-all-missing-persons');

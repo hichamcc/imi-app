@@ -122,6 +122,27 @@ class PayrollImportController extends Controller
     {
         $import = PayrollImport::where('user_id', auth()->id())->findOrFail($id);
 
+        $rematched = $this->persistReviewState($import, $request);
+        $import->update(['status' => 'reviewed']);
+
+        $msg = 'Review saved.';
+        if ($rematched > 0) {
+            $msg .= " {$rematched} row(s) auto-matched to an existing person from your HR records.";
+        }
+
+        return redirect()->route('payroll-imports.review', $import->id)->with('success', $msg);
+    }
+
+    /**
+     * Save the user's current review state (checkboxes, name corrections, person matches)
+     * to the DB. Returns the count of rows that were auto-matched via name edits.
+     *
+     * Shared between updateReview() and generatePayslips() so that hitting "Generate Payslips"
+     * directly always reflects the latest checkbox state without requiring a separate
+     * "Save Review" click first.
+     */
+    private function persistReviewState(PayrollImport $import, Request $request): int
+    {
         $request->validate([
             'rows' => 'array',
             'rows.*.is_payroll' => 'nullable|boolean',
@@ -130,6 +151,10 @@ class PayrollImportController extends Controller
         ]);
 
         $input = $request->input('rows', []);
+        if (empty($input)) {
+            return 0; // no row data submitted (e.g. raw "save" with empty body) — leave DB untouched
+        }
+
         $personLookup = $this->buildLocalPersonLookup();
         $rematched = 0;
 
@@ -143,7 +168,6 @@ class PayrollImportController extends Controller
             $newName = $input[$key]['parsed_name'] ?? $row->parsed_name;
             $newMatch = $input[$key]['matched_person_id'] ?? $row->matched_person_id;
 
-            // If no explicit match was supplied, try to auto-resolve from the edited name
             if (empty($newMatch) && !empty($newName)) {
                 $candidate = $personLookup[strtolower(trim($newName))] ?? null;
                 if ($candidate) {
@@ -159,14 +183,7 @@ class PayrollImportController extends Controller
             ]);
         }
 
-        $import->update(['status' => 'reviewed']);
-
-        $msg = 'Review saved.';
-        if ($rematched > 0) {
-            $msg .= " {$rematched} row(s) auto-matched to an existing person from your HR records.";
-        }
-
-        return redirect()->route('payroll-imports.review', $import->id)->with('success', $msg);
+        return $rematched;
     }
 
     /**
@@ -264,9 +281,17 @@ class PayrollImportController extends Controller
     /**
      * Generate Payslip records + PDFs for every ticked row that has a matched person.
      */
-    public function generatePayslips(string $id, PayslipGenerator $generator)
+    public function generatePayslips(Request $request, string $id, PayslipGenerator $generator)
     {
         $import = PayrollImport::where('user_id', auth()->id())->findOrFail($id);
+
+        // If row data was submitted (e.g. the Generate button is inside the review form),
+        // persist the latest checkbox state before counting. This avoids the bug where
+        // the user un-ticks rows visually but the DB still holds the stale state.
+        if ($request->has('rows')) {
+            $this->persistReviewState($import, $request);
+        }
+
         $rows = $import->rows()->where('is_payroll', true)->get();
 
         if ($rows->isEmpty()) {

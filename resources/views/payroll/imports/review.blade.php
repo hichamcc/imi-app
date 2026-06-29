@@ -29,13 +29,15 @@
                         </button>
                     </form>
                 @endif
-                <form method="POST" action="{{ route('payroll-imports.generate-payslips', $import->id) }}"
-                      onsubmit="return confirm('{{ __('Generate payslips for every ticked row with a matched person? Existing payslips for the same row will be replaced.') }}')">
-                    @csrf
-                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">
-                        {{ __('Generate Payslips') }}
-                    </button>
-                </form>
+                {{-- Submits the *review* form (below) so the latest checkbox state is
+                     persisted before the generate handler runs. --}}
+                <button type="submit"
+                        form="reviewForm"
+                        formaction="{{ route('payroll-imports.generate-payslips', $import->id) }}"
+                        onclick="return confirm('{{ __('Generate payslips for every ticked row with a matched person? Existing payslips for the same row will be replaced.') }}')"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">
+                    {{ __('Generate Payslips') }}
+                </button>
                 <a href="{{ route('payroll-imports.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">{{ __('Back') }}</a>
             </div>
         </div>
@@ -66,8 +68,8 @@
             · <span class="inline-flex px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded">⚠️ {{ __('missing') }}</span>
         </div>
 
-        <form method="POST" action="{{ route('payroll-imports.review.update', $import->id) }}">
-            @csrf @method('PUT')
+        <form id="reviewForm" method="POST" action="{{ route('payroll-imports.review.update.post', $import->id) }}">
+            @csrf
 
             <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
