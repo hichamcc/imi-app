@@ -1,5 +1,5 @@
 <x-layouts.app :title="__('Review Payroll Import')">
-    <div class="flex h-full w-full flex-1 flex-col gap-6">
+    <div class="flex h-full w-full flex-1 flex-col gap-6" x-data="reviewState()" @change="recount()">
         <div class="flex items-center justify-between">
             <div>
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ __('Review Payroll Import') }}</h1>
@@ -8,27 +8,20 @@
                     @if($import->account_number) · <span class="font-mono text-xs">{{ $import->account_number }}</span>@endif
                 </p>
             </div>
-            @php
-                $missingMatchCount = $rows->where('is_payroll', true)
-                    ->whereNull('matched_person_id')
-                    ->filter(fn ($r) => !empty($r->parsed_name))
-                    ->count();
-            @endphp
             <div class="flex gap-2">
                 @if($import->payslips_generated > 0)
                     <span class="px-3 py-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 rounded-lg text-sm font-medium">
                         {{ $import->payslips_generated }} {{ __('payslips generated') }}
                     </span>
                 @endif
-                @if($missingMatchCount > 0)
-                    <form method="POST" action="{{ route('payroll-imports.create-all-missing-persons', $import->id) }}"
-                          onsubmit="return confirm('{{ __('Create person stubs for') }} {{ $missingMatchCount }} {{ __('row(s) that have no matched person? You can edit their details from the Persons page later.') }}')">
-                        @csrf
-                        <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium">
-                            {{ __('Create :n missing person(s)', ['n' => $missingMatchCount]) }}
-                        </button>
-                    </form>
-                @endif
+                <form method="POST" action="{{ route('payroll-imports.create-all-missing-persons', $import->id) }}"
+                      x-show="missingMatchCount > 0" x-cloak
+                      @submit="return confirm('{{ __('Create person stubs for the') }} ' + missingMatchCount + ' {{ __('ticked unmatched row(s)? You can edit their details from the Persons page later.') }}')">
+                    @csrf
+                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium">
+                        {{ __('Create') }} <span x-text="missingMatchCount"></span> {{ __('missing person(s)') }}
+                    </button>
+                </form>
                 {{-- Submits the *review* form (below) so the latest checkbox state is
                      persisted before the generate handler runs. --}}
                 <button type="submit"
@@ -46,19 +39,18 @@
         @if(session('info'))<div class="bg-blue-50 border border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300 px-4 py-3 rounded-lg">{{ session('info') }}</div>@endif
         @if(session('error'))<div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg">{{ session('error') }}</div>@endif
 
-        @if($missingMatchCount > 0)
-            <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg text-sm space-y-2">
-                <div>
-                    ⚠️ <strong>{{ $missingMatchCount }}</strong> {{ __('ticked row(s) have no matched person.') }}
-                </div>
-                <div class="text-xs">
-                    {{ __('Recommended:') }}
-                    <a href="{{ route('persons.import-from-imi') }}" class="font-medium underline hover:no-underline">{{ __('Import drivers from IMI first') }}</a>
-                    {{ __('— they will be matched automatically when you come back here.') }}
-                    {{ __('Or, as a quick fallback, click the green') }} <strong>"{{ __('Create :n missing person(s)', ['n' => $missingMatchCount]) }}"</strong> {{ __('button above to create stub HR records for them.') }}
-                </div>
+        <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300 px-4 py-3 rounded-lg text-sm space-y-2"
+             x-show="missingMatchCount > 0" x-cloak>
+            <div>
+                ⚠️ <strong x-text="missingMatchCount"></strong> {{ __('ticked row(s) have no matched person.') }}
             </div>
-        @endif
+            <div class="text-xs">
+                {{ __('Recommended:') }}
+                <a href="{{ route('persons.import-from-imi') }}" class="font-medium underline hover:no-underline">{{ __('Import drivers from IMI first') }}</a>
+                {{ __('— they will be matched automatically when you come back here.') }}
+                {{ __('Or, as a quick fallback, click the green "Create N missing person(s)" button above to create stub HR records for them.') }}
+            </div>
+        </div>
 
         <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-200">
             <strong>{{ __('How this works') }}:</strong>
@@ -104,11 +96,15 @@
                                     $salary  = max((float) $row->debit - $perDiem, 0);
                                     $imiHits = $imiPresence[$row->id] ?? [];
                                     $isCharge = $row->credit > 0;
+                                    // Row is "unmatched" if it has a parsed name but no matched local Person.
+                                    // Used by Alpine to count ticked-and-unmatched rows live.
+                                    $isUnmatched = !empty($row->parsed_name) && empty($row->matched_person_id);
                                 @endphp
                                 <tr class="{{ $row->looks_like_payroll ? '' : 'bg-gray-50/50 dark:bg-gray-700/30' }}">
                                     <td class="px-3 py-2">
                                         <input type="checkbox" name="rows[{{ $row->id }}][is_payroll]" value="1"
                                             class="payroll-cb h-4 w-4 text-blue-600 rounded border-gray-300"
+                                            data-unmatched="{{ $isUnmatched ? '1' : '0' }}"
                                             {{ $row->is_payroll ? 'checked' : '' }}
                                             {{ $isCharge ? 'disabled' : '' }}>
                                     </td>
@@ -183,6 +179,26 @@
     <script>
         function toggleAll(state) {
             document.querySelectorAll('.payroll-cb').forEach(cb => { if (!cb.disabled) cb.checked = state; });
+            // Notify the Alpine scope so the banner/buttons recount
+            document.dispatchEvent(new Event('recountReview'));
+        }
+
+        // Alpine component for the live "ticked unmatched rows" count.
+        function reviewState() {
+            return {
+                missingMatchCount: 0,
+                init() {
+                    this.recount();
+                    document.addEventListener('recountReview', () => this.recount());
+                },
+                recount() {
+                    let n = 0;
+                    document.querySelectorAll('.payroll-cb[data-unmatched="1"]').forEach(cb => {
+                        if (cb.checked && !cb.disabled) n++;
+                    });
+                    this.missingMatchCount = n;
+                },
+            };
         }
     </script>
 </x-layouts.app>
