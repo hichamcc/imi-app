@@ -10,6 +10,13 @@
                     @csrf
                     <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium">{{ __('Push all missing to IMI') }}</button>
                 </form>
+                @if(count($remote) > 0)
+                    <form method="POST" action="{{ route('trucks.plate-numbers.delete-all') }}"
+                          onsubmit="return confirm('{{ __('Delete ALL :n plate(s) from the IMI register? This cannot be undone. Active declarations referencing these plates will be rejected by the API.', ['n' => count($remote)]) }}')">
+                        @csrf
+                        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium">{{ __('Delete all from IMI') }}</button>
+                    </form>
+                @endif
                 <a href="{{ route('trucks.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium">{{ __('Back to Trucks') }}</a>
             </div>
         </div>
@@ -81,8 +88,7 @@
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 font-medium text-gray-700 dark:text-gray-200">
                 {{ __('IMI register') }} ({{ count($remote) }})
             </div>
-            <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 flex justify-between items-center">
-                <span>{{ __('The API list endpoint may omit some fields (legacy records). Values shown in') }} <span class="text-blue-600 dark:text-blue-400 font-medium">{{ __('blue') }}</span> {{ __('come from the matching local truck.') }}</span>
+            <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 flex justify-end items-center">
                 @if($debug)
                     <a href="{{ route('trucks.plate-numbers') }}" class="text-red-600 hover:underline">{{ __('Hide raw') }}</a>
                 @else
@@ -104,61 +110,31 @@
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 text-sm">
                         @foreach($remote as $r)
                             @php
-                                $plateKey = strtoupper(trim($r['plateNumber'] ?? ''));
-                                $localTruck = $localByPlate[$plateKey] ?? null;
-
-                                $apiTransport = $r['plateNumberTransportType']
+                                $transport = $r['plateNumberTransportType']
                                     ?? $r['transportType']
-                                    ?? $r['transport_type']
-                                    ?? $r['carriageType']
-                                    ?? $r['carriage_type']
                                     ?? null;
-                                $apiWeight = $r['vehicleWeight']
-                                    ?? $r['vehicle_weight']
-                                    ?? $r['weightType']
-                                    ?? $r['weight_type']
-                                    ?? null;
-
-                                // Fall back to local truck data when API value is missing
-                                $transportFromLocal = false;
-                                $transport = $apiTransport;
-                                if (($transport === null || $transport === '') && $localTruck) {
-                                    $transport = $localTruck->carriage_type;
-                                    $transportFromLocal = true;
-                                }
-
-                                $weightFromLocal = false;
-                                $weight = $apiWeight;
-                                if (($weight === null || $weight === '') && $localTruck) {
-                                    $weight = $localTruck->weight_type;
-                                    $weightFromLocal = true;
-                                }
-
+                                $weight = $r['vehicleWeight'] ?? null;
                                 $transportLabel = match ($transport) {
                                     'CARRIAGE_OF_PASSENGERS' => __('Passengers'),
                                     'CARRIAGE_OF_GOODS' => __('Goods'),
-                                    null, '' => __('— unset —'),
+                                    null, '' => null,
                                     default => $transport,
                                 };
-                                $plateId = $r['plateNumberId'] ?? $r['plate_number_id'] ?? '';
+                                $plateId = $r['plateNumberId'] ?? '';
                             @endphp
                             <tr>
                                 <td class="px-6 py-3 font-mono text-gray-900 dark:text-white">{{ $r['plateNumber'] ?? '' }}</td>
                                 <td class="px-6 py-3">{{ $r['registrationCountry'] ?? '—' }}</td>
                                 <td class="px-6 py-3 text-xs">
-                                    @if($transport === null || $transport === '')
-                                        <span class="text-gray-400 italic" title="{{ __('Field missing in API response — and no local truck to fall back to') }}">{{ $transportLabel }}</span>
-                                    @elseif($transportFromLocal)
-                                        <span class="text-blue-600 dark:text-blue-400" title="{{ __('From local truck (API omitted this field)') }}">{{ $transportLabel }} *</span>
+                                    @if($transportLabel === null)
+                                        <span class="text-gray-400">—</span>
                                     @else
                                         {{ $transportLabel }}
                                     @endif
                                 </td>
                                 <td class="px-6 py-3 text-xs">
                                     @if($weight === null || $weight === '')
-                                        <span class="text-gray-400 italic">—</span>
-                                    @elseif($weightFromLocal)
-                                        <span class="text-blue-600 dark:text-blue-400" title="{{ __('From local truck (API omitted this field)') }}">{{ $weight }} *</span>
+                                        <span class="text-gray-400">—</span>
                                     @else
                                         {{ $weight }}
                                     @endif

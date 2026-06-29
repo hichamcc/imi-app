@@ -445,6 +445,52 @@ class TruckController extends Controller
     }
 
     /**
+     * Delete every plate-number from the IMI register for the current user's
+     * IMI operator. Destructive; protected by the controller-level admin check
+     * via the form's confirmation prompt.
+     */
+    public function deleteAllPlateNumbers(PlateNumberService $plateNumberService)
+    {
+        try {
+            $remote = $plateNumberService->all();
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', 'Failed to fetch IMI register: ' . $e->getMessage());
+        }
+
+        if (empty($remote)) {
+            return redirect()->back()->with('info', 'IMI register is already empty.');
+        }
+
+        $deleted = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($remote as $r) {
+            $id = $r['plateNumberId'] ?? null;
+            if (!$id) continue;
+            try {
+                $plateNumberService->delete($id);
+                $deleted++;
+            } catch (\Throwable $e) {
+                $failed++;
+                $errors[] = ($r['plateNumber'] ?? $id) . ': ' . $e->getMessage();
+            }
+        }
+
+        // Clear all local truck → IMI links for this user
+        Truck::where('user_id', auth()->id())
+            ->whereNotNull('api_vehicle_id')
+            ->update(['api_vehicle_id' => null]);
+
+        $msg = "Deleted {$deleted} plate(s) from IMI register.";
+        if ($failed > 0) {
+            $msg .= " {$failed} failed: " . implode(' | ', array_slice($errors, 0, 3));
+        }
+
+        return redirect()->back()->with($failed === 0 ? 'success' : 'warning', $msg);
+    }
+
+    /**
      * Delete a plate-number record from the IMI register. Also clears the
      * api_vehicle_id on any local truck that was linked to it.
      */
