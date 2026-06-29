@@ -125,6 +125,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
         Route::post('persons/{person}/sync-to-imi', [PersonController::class, 'syncToImi'])->name('persons.sync-to-imi');
         Route::post('persons/{person}/link-to-imi', [PersonController::class, 'linkToImiDriver'])->name('persons.link-to-imi');
         Route::get('persons/{person}/contract.pdf', [PersonController::class, 'generateContract'])->name('persons.contract');
+        Route::post('persons/{person}/contract.pdf', [PersonController::class, 'generateContract'])->name('persons.contract.post');
 
         // Payroll imports
         Route::get('payroll-imports', [PayrollImportController::class, 'index'])->name('payroll-imports.index');

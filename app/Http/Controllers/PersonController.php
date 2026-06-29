@@ -267,17 +267,20 @@ class PersonController extends Controller
     }
 
     /**
-     * Generate the employment contract PDF for download.
+     * Generate the employment agreement PDF for download.
+     * Accepts an optional `notes` field that will be rendered into the document.
      */
-    public function generateContract(string $id)
+    public function generateContract(Request $request, string $id)
     {
         $person = Person::where('user_id', auth()->id())->findOrFail($id);
         $company = auth()->user()->getCompanyHeader();
 
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.employment_contract', compact('person', 'company'))
+        $contractNotes = $request->input('notes');
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.employment_contract', compact('person', 'company', 'contractNotes'))
             ->setPaper('a4');
 
-        $filename = 'employment-contract-' . str_replace(' ', '_', strtolower($person->full_name)) . '.pdf';
+        $filename = 'employment-agreement-' . str_replace(' ', '_', strtolower($person->full_name)) . '.pdf';
 
         return $pdf->download($filename);
     }

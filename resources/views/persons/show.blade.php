@@ -10,12 +10,45 @@
                     <p class="text-gray-600 dark:text-gray-400">{{ $person->position }}</p>
                 </div>
             </div>
-            <div class="flex gap-2">
-                <a href="{{ route('persons.contract', $person->id) }}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium" target="_blank">
-                    {{ __('Download Contract (PDF)') }}
-                </a>
+            <div class="flex gap-2" x-data="{ contractOpen: false }">
+                <button type="button" @click="contractOpen = true" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">
+                    {{ __('Generate Employment Agreement') }}
+                </button>
                 <a href="{{ route('persons.edit', $person->id) }}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium">{{ __('Edit') }}</a>
                 <a href="{{ route('persons.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium">{{ __('Back') }}</a>
+
+                {{-- Contract generation modal --}}
+                <div x-show="contractOpen" x-cloak class="fixed inset-0 z-50 bg-gray-900/60 flex items-center justify-center p-4" @click.self="contractOpen = false">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-xl">
+                        <form method="POST" action="{{ route('persons.contract.post', $person->id) }}" target="_blank">
+                            @csrf
+                            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ __('Generate Employment Agreement') }}</h3>
+                                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ __('Add optional notes that will be included in the PDF before the signature block.') }}</p>
+                            </div>
+                            <div class="px-6 py-4 space-y-4">
+                                <div class="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded p-3 space-y-0.5">
+                                    <div><strong>{{ __('Employee') }}:</strong> {{ $person->full_name }}</div>
+                                    <div><strong>{{ __('Document') }}:</strong> {{ $person->document_number ?? '—' }}</div>
+                                    <div><strong>{{ __('Contract start') }}:</strong> {{ $person->contract_start_date?->format('d M Y') ?? __('today') }}</div>
+                                    <div><strong>{{ __('IBAN') }}:</strong> {{ $person->bank_iban ?? '—' }}</div>
+                                </div>
+                                <div>
+                                    <label for="contract_notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                        {{ __('Additional notes') }} <span class="text-gray-400 text-xs">({{ __('optional') }})</span>
+                                    </label>
+                                    <textarea name="notes" id="contract_notes" rows="5" maxlength="3000"
+                                              placeholder="{{ __('e.g. special clauses, bonuses, agreed exceptions, internal references…') }}"
+                                              class="block w-full rounded-lg border border-gray-200 px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
+                                </div>
+                            </div>
+                            <div class="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+                                <button type="button" @click="contractOpen = false" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">{{ __('Cancel') }}</button>
+                                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg">{{ __('Download PDF') }}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
 
