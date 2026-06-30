@@ -141,6 +141,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
 
         // Payslips
         Route::get('payslips', [PayslipController::class, 'index'])->name('payslips.index');
+        Route::get('payslips/download-zip', [PayslipController::class, 'downloadZip'])->name('payslips.download-zip');
         Route::get('payslips/{payslip}/view', [PayslipController::class, 'view'])->name('payslips.view');
         Route::get('payslips/{payslip}/download', [PayslipController::class, 'download'])->name('payslips.download');
         Route::post('payslips/{payslip}/regenerate', [PayslipController::class, 'regenerate'])->name('payslips.regenerate');

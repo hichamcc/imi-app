@@ -10,17 +10,45 @@
 
         @if(session('success'))<div class="bg-green-50 border border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300 px-4 py-3 rounded-lg">{{ session('success') }}</div>@endif
 
-        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-            <form method="GET" action="{{ route('payslips.index') }}" class="flex gap-3 flex-wrap">
-                <input type="text" name="search" value="{{ request('search') }}" placeholder="{{ __('Search by employee name...') }}"
-                    class="flex-1 min-w-[200px] rounded-lg border border-gray-200 px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                <input type="month" name="month" value="{{ request('month') }}"
-                    class="rounded-lg border border-gray-200 px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+            <form id="payslipFilter" method="GET" action="{{ route('payslips.index') }}" class="flex gap-3 flex-wrap items-end">
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">{{ __('Employee') }}</label>
+                    <input type="text" name="search" value="{{ request('search') }}" placeholder="{{ __('Search by employee name...') }}"
+                        class="block w-full rounded-lg border border-gray-200 px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">{{ __('Payroll month') }}</label>
+                    <input type="month" name="month" value="{{ request('month') }}"
+                        class="rounded-lg border border-gray-200 px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">{{ __('Payment date from') }}</label>
+                    <input type="date" name="from" value="{{ request('from') }}"
+                        class="rounded-lg border border-gray-200 px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">{{ __('Payment date to') }}</label>
+                    <input type="date" name="to" value="{{ request('to') }}"
+                        class="rounded-lg border border-gray-200 px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                </div>
                 <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">{{ __('Filter') }}</button>
-                @if(request('search') || request('month'))
+                @if(request('search') || request('month') || request('from') || request('to'))
                     <a href="{{ route('payslips.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">{{ __('Clear') }}</a>
                 @endif
             </form>
+
+            @if(($totalMatching ?? 0) > 0)
+                <div class="pt-2 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <span class="text-sm text-gray-600 dark:text-gray-400">
+                        {{ $totalMatching }} {{ __('payslip(s) match the current filter') }}
+                    </span>
+                    <a href="{{ route('payslips.download-zip', request()->only(['search','month','from','to'])) }}"
+                       class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm">
+                        {{ __('Download :n payslip(s) as ZIP', ['n' => $totalMatching]) }}
+                    </a>
+                </div>
+            @endif
         </div>
 
         <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
