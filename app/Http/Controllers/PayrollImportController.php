@@ -100,7 +100,26 @@ class PayrollImportController extends Controller
         $import = PayrollImport::where('user_id', auth()->id())->findOrFail($id);
         $rows = $import->rows()->with('matchedPerson')->get();
 
-        // For unmatched rows with a parsed_name, look them up cross-org in IMI
+        // Auto-match any unmatched rows against current local persons (handles the case where
+        // persons were added to the DB after the import was first uploaded).
+        $personLookup = $this->buildLocalPersonLookup();
+        $autoMatched = 0;
+        foreach ($rows as $row) {
+            if ($row->matched_person_id || !$row->parsed_name) continue;
+            $candidate = $personLookup[strtolower(trim($row->parsed_name))] ?? null;
+            if ($candidate) {
+                $row->update(['matched_person_id' => $candidate]);
+                $row->matched_person_id = $candidate;
+                $autoMatched++;
+            }
+        }
+
+        // Reload with matchedPerson relation populated after auto-matching
+        if ($autoMatched > 0) {
+            $rows = $import->rows()->with('matchedPerson')->get();
+        }
+
+        // For still-unmatched rows with a parsed_name, look them up cross-org in IMI
         $imiPresence = [];
         foreach ($rows as $row) {
             if (!$row->parsed_name || $row->matched_person_id) continue;

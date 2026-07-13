@@ -25,6 +25,7 @@ class PersonController extends Controller
             $query->where(function ($q) use ($term) {
                 $q->where('first_name', 'like', "%{$term}%")
                     ->orWhere('last_name', 'like', "%{$term}%")
+                    ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$term}%"])
                     ->orWhere('document_number', 'like', "%{$term}%")
                     ->orWhere('email', 'like', "%{$term}%");
             });
