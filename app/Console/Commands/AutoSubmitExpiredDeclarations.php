@@ -128,19 +128,41 @@ class AutoSubmitExpiredDeclarations extends Command
                    
 
                     if (isset($declarations['items']) && is_array($declarations['items'])) {
+                        // Pre-scan: build a set of driver+country pairs that ALREADY have an active
+                        // SUBMITTED declaration (end_date >= today). Those don't need renewal — skip
+                        // them even if the range contains an older expired one for the same pair.
+                        $activePairs = [];
+                        foreach ($declarations['items'] as $declaration) {
+                            $status = strtoupper($declaration['declarationStatus'] ?? '');
+                            $endDate = $declaration['declarationEndDate'] ?? '';
+                            if ($status !== 'SUBMITTED' || $endDate < $today) continue;
+                            $pairKey = ($declaration['driverId'] ?? 'no-driver') . '|' . ($declaration['declarationPostingCountry'] ?? '');
+                            $activePairs[$pairKey] = true;
+                        }
+
                         // Dedupe: if the same driver + country has multiple expired declarations
                         // in the range (e.g. a chain of failed renewals), keep only the one with
                         // the latest end_date so we don't create duplicates.
                         $candidates = [];
+                        $skippedAlreadyActive = 0;
                         foreach ($declarations['items'] as $declaration) {
                             if (!$this->isWithinExpiredRange($declaration, $sinceDate, $yesterday)) {
                                 continue;
                             }
                             $dedupeKey = ($declaration['driverId'] ?? 'no-driver') . '|' . ($declaration['declarationPostingCountry'] ?? '');
+                            if (isset($activePairs[$dedupeKey])) {
+                                $skippedAlreadyActive++;
+                                continue;
+                            }
                             $endDate = $declaration['declarationEndDate'] ?? '';
                             if (!isset($candidates[$dedupeKey]) || $endDate > ($candidates[$dedupeKey]['declarationEndDate'] ?? '')) {
                                 $candidates[$dedupeKey] = $declaration;
                             }
+                        }
+
+                        if ($skippedAlreadyActive > 0) {
+                            $this->info("  ⏭ Skipped {$skippedAlreadyActive} expired declaration(s) — driver+country already has an active SUBMITTED declaration.");
+                            $skippedCount += $skippedAlreadyActive;
                         }
 
                         foreach ($candidates as $declaration) {
@@ -170,22 +192,52 @@ class AutoSubmitExpiredDeclarations extends Command
 
                                     $this->line("    Creating new declaration with start date: {$newDeclarationData['declarationStartDate']} and end date: {$newDeclarationData['declarationEndDate']}");
 
-                                    // Pre-check: warn about plates in the payload that aren't in the local plate register.
-                                    // The API will reject the declaration if any plate is unknown to /plate-numbers.
-                                    $payloadPlates = array_merge(
-                                        $newDeclarationData['declarationVehiclePlateNumber'] ?? [],
-                                        $newDeclarationData['declarationVehiclePlateNumberLight'] ?? [],
-                                        $newDeclarationData['declarationVehiclePlateNumberHeavy'] ?? [],
-                                    );
-                                    $missingPlates = array_values(array_filter($payloadPlates, fn($p) => !isset($this->plateWeightMap[$p])));
-                                    if (!empty($missingPlates)) {
-                                        $this->warn('    ⚠ Plates NOT in /plate-numbers register (declaration will likely be rejected): ' . implode(', ', $missingPlates));
-                                        Log::warning('AUTO-SUBMIT: Unregistered plates on declaration payload', [
+                                    // Filter out plates that aren't in the /plate-numbers register — these are
+                                    // typically retired trucks that got carried forward from an old declaration.
+                                    // The API rejects declarations that reference unregistered plates, so we
+                                    // strip them and submit with the registered subset. If nothing is left,
+                                    // skip the whole declaration (nothing to renew).
+                                    $droppedPlates = [];
+                                    foreach (['declarationVehiclePlateNumber', 'declarationVehiclePlateNumberLight', 'declarationVehiclePlateNumberHeavy'] as $field) {
+                                        if (empty($newDeclarationData[$field])) continue;
+                                        $kept = [];
+                                        foreach ($newDeclarationData[$field] as $plate) {
+                                            if (isset($this->plateWeightMap[$plate])) {
+                                                $kept[] = $plate;
+                                            } else {
+                                                $droppedPlates[] = $plate;
+                                            }
+                                        }
+                                        if (empty($kept)) {
+                                            unset($newDeclarationData[$field]);
+                                        } else {
+                                            $newDeclarationData[$field] = array_values(array_unique($kept));
+                                        }
+                                    }
+
+                                    if (!empty($droppedPlates)) {
+                                        $this->warn('    ⚠ Dropped ' . count($droppedPlates) . ' unregistered plate(s): ' . implode(', ', $droppedPlates));
+                                        Log::info('AUTO-SUBMIT: Dropped unregistered plates from payload', [
                                             'source_declaration_id' => $declaration['declarationId'],
                                             'driver_id' => $driverId,
                                             'country' => $newDeclarationData['declarationPostingCountry'],
-                                            'missing_plates' => $missingPlates,
+                                            'dropped_plates' => $droppedPlates,
                                         ]);
+                                    }
+
+                                    $hasAnyPlate = !empty($newDeclarationData['declarationVehiclePlateNumber'])
+                                        || !empty($newDeclarationData['declarationVehiclePlateNumberLight'])
+                                        || !empty($newDeclarationData['declarationVehiclePlateNumberHeavy']);
+                                    if (!$hasAnyPlate) {
+                                        $this->warn('    ⏭ Skipping — all plates on the source declaration are unregistered.');
+                                        Log::warning('AUTO-SUBMIT: Skipped declaration — no registered plates left after filtering', [
+                                            'source_declaration_id' => $declaration['declarationId'],
+                                            'driver_id' => $driverId,
+                                            'country' => $newDeclarationData['declarationPostingCountry'],
+                                            'dropped_plates' => $droppedPlates,
+                                        ]);
+                                        $skippedCount++;
+                                        continue;
                                     }
 
                                     if ($dryRun) {
