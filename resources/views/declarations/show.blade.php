@@ -160,14 +160,41 @@
                         </div>
                         <div>
                             <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ __('Vehicle Plate Numbers') }}</dt>
-                            <dd class="mt-1">
-                                @if(isset($declaration['declarationVehiclePlateNumber']) && is_array($declaration['declarationVehiclePlateNumber']))
-                                    @foreach($declaration['declarationVehiclePlateNumber'] as $plate)
-                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 mr-2 mb-2">
-                                            {{ $plate }}
-                                        </span>
-                                    @endforeach
-                                @else
+                            <dd class="mt-1 space-y-2">
+                                @php
+                                    $passengerPlates = is_array($declaration['declarationVehiclePlateNumber'] ?? null) ? $declaration['declarationVehiclePlateNumber'] : [];
+                                    $lightPlates = is_array($declaration['declarationVehiclePlateNumberLight'] ?? null) ? $declaration['declarationVehiclePlateNumberLight'] : [];
+                                    $heavyPlates = is_array($declaration['declarationVehiclePlateNumberHeavy'] ?? null) ? $declaration['declarationVehiclePlateNumberHeavy'] : [];
+                                @endphp
+
+                                @if(!empty($heavyPlates))
+                                    <div>
+                                        <span class="text-xs text-gray-500 dark:text-gray-400 block mb-1">{{ __('Heavy goods') }}</span>
+                                        @foreach($heavyPlates as $plate)
+                                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300 mr-2 mb-2">{{ $plate }}</span>
+                                        @endforeach
+                                    </div>
+                                @endif
+
+                                @if(!empty($lightPlates))
+                                    <div>
+                                        <span class="text-xs text-gray-500 dark:text-gray-400 block mb-1">{{ __('Light goods') }}</span>
+                                        @foreach($lightPlates as $plate)
+                                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 mr-2 mb-2">{{ $plate }}</span>
+                                        @endforeach
+                                    </div>
+                                @endif
+
+                                @if(!empty($passengerPlates))
+                                    <div>
+                                        <span class="text-xs text-gray-500 dark:text-gray-400 block mb-1">{{ __('Passenger vehicles') }}</span>
+                                        @foreach($passengerPlates as $plate)
+                                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 mr-2 mb-2">{{ $plate }}</span>
+                                        @endforeach
+                                    </div>
+                                @endif
+
+                                @if(empty($heavyPlates) && empty($lightPlates) && empty($passengerPlates))
                                     <span class="text-sm text-gray-900 dark:text-white">N/A</span>
                                 @endif
                             </dd>
