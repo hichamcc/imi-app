@@ -299,10 +299,12 @@ class PostingApiService
                 return new \Exception('API access forbidden. Insufficient permissions.', 403);
             case 404:
                 return new \Exception('API resource not found.', 404);
+            case 400:
             case 422:
-                $response = $e->getResponse() ? json_decode($e->getResponse()->getBody()->getContents(), true) : [];
-                $message = $response['message'] ?? 'Validation failed';
-                return new \Exception($message, 422);
+                $body = $e->getResponse() ? (string) $e->getResponse()->getBody() : '';
+                $decoded = json_decode($body, true);
+                $message = $decoded['message'] ?? ($body ?: 'Validation failed');
+                return new \Exception($message, $statusCode);
             case 429:
                 return new \Exception('API rate limit exceeded. Please try again later.', 429);
             case 500:

@@ -170,6 +170,24 @@ class AutoSubmitExpiredDeclarations extends Command
 
                                     $this->line("    Creating new declaration with start date: {$newDeclarationData['declarationStartDate']} and end date: {$newDeclarationData['declarationEndDate']}");
 
+                                    // Pre-check: warn about plates in the payload that aren't in the local plate register.
+                                    // The API will reject the declaration if any plate is unknown to /plate-numbers.
+                                    $payloadPlates = array_merge(
+                                        $newDeclarationData['declarationVehiclePlateNumber'] ?? [],
+                                        $newDeclarationData['declarationVehiclePlateNumberLight'] ?? [],
+                                        $newDeclarationData['declarationVehiclePlateNumberHeavy'] ?? [],
+                                    );
+                                    $missingPlates = array_values(array_filter($payloadPlates, fn($p) => !isset($this->plateWeightMap[$p])));
+                                    if (!empty($missingPlates)) {
+                                        $this->warn('    ⚠ Plates NOT in /plate-numbers register (declaration will likely be rejected): ' . implode(', ', $missingPlates));
+                                        Log::warning('AUTO-SUBMIT: Unregistered plates on declaration payload', [
+                                            'source_declaration_id' => $declaration['declarationId'],
+                                            'driver_id' => $driverId,
+                                            'country' => $newDeclarationData['declarationPostingCountry'],
+                                            'missing_plates' => $missingPlates,
+                                        ]);
+                                    }
+
                                     if ($dryRun) {
                                         $this->info("    [dry-run] Would POST /declarations for driver {$driverId}, country {$newDeclarationData['declarationPostingCountry']}");
                                         $createdCount++;
