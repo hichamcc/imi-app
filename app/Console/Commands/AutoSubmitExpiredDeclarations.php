@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\PostingApiService;
 use App\Services\DeclarationService;
+use App\Services\PlateNumberService;
 use App\Models\DriverProfile;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -11,17 +12,24 @@ use Carbon\Carbon;
 
 class AutoSubmitExpiredDeclarations extends Command
 {
-    protected $signature = 'declarations:auto-submit';
-    protected $description = 'Automatically create and submit new declarations for drivers with expired declarations (end date was yesterday)';
+    protected $signature = 'declarations:auto-submit
+                            {--since= : Renew declarations that expired on or after this date (YYYY-MM-DD). Default: yesterday only.}
+                            {--dry-run : List what would be renewed without calling the API.}';
+    protected $description = 'Automatically create and submit new declarations for drivers with expired declarations. Defaults to declarations that ended yesterday; use --since=YYYY-MM-DD to catch up on missed renewals.';
 
     protected PostingApiService $apiService;
     protected DeclarationService $declarationService;
+    protected PlateNumberService $plateNumberService;
 
-    public function __construct(PostingApiService $apiService, DeclarationService $declarationService)
+    /** Cache of plate → 'LIGHT' | 'HEAVY' | 'PASSENGERS' for the current user's register. */
+    protected array $plateWeightMap = [];
+
+    public function __construct(PostingApiService $apiService, DeclarationService $declarationService, PlateNumberService $plateNumberService)
     {
         parent::__construct();
         $this->apiService = $apiService;
         $this->declarationService = $declarationService;
+        $this->plateNumberService = $plateNumberService;
     }
 
     public function handle()
@@ -41,6 +49,16 @@ class AutoSubmitExpiredDeclarations extends Command
 
         $yesterday = Carbon::yesterday()->format('Y-m-d');
         $today = Carbon::today()->format('Y-m-d');
+        $sinceDate = $this->option('since') ? Carbon::parse($this->option('since'))->format('Y-m-d') : $yesterday;
+        $dryRun = (bool) $this->option('dry-run');
+
+        if ($sinceDate !== $yesterday) {
+            $this->warn("Range mode: renewing declarations expired between {$sinceDate} and {$yesterday} (inclusive). Duplicates per driver+country will be deduped, keeping only the latest.");
+        }
+        if ($dryRun) {
+            $this->warn('DRY RUN — no API create/submit calls will be made.');
+        }
+
         $expiredCount = 0;
         $createdCount = 0;
         $submittedCount = 0;
@@ -72,6 +90,10 @@ class AutoSubmitExpiredDeclarations extends Command
                         $user->api_key,
                         $user->api_operator_id
                     );
+
+                    // Load the user's plate-number register once per user so we can split
+                    // legacy `declarationVehiclePlateNumber` values into LIGHT/HEAVY for goods.
+                    $this->loadPlateWeightMap();
 
                     // Get ALL declarations for this user using pagination
                     $allDeclarations = [];
@@ -106,12 +128,24 @@ class AutoSubmitExpiredDeclarations extends Command
                    
 
                     if (isset($declarations['items']) && is_array($declarations['items'])) {
+                        // Dedupe: if the same driver + country has multiple expired declarations
+                        // in the range (e.g. a chain of failed renewals), keep only the one with
+                        // the latest end_date so we don't create duplicates.
+                        $candidates = [];
                         foreach ($declarations['items'] as $declaration) {
-                            // Check if declaration expired yesterday and needs renewal
-                            if ($this->shouldCreateNewDeclaration($declaration, $yesterday)) {
-                                $expiredCount++;
+                            if (!$this->isWithinExpiredRange($declaration, $sinceDate, $yesterday)) {
+                                continue;
+                            }
+                            $dedupeKey = ($declaration['driverId'] ?? 'no-driver') . '|' . ($declaration['declarationPostingCountry'] ?? '');
+                            $endDate = $declaration['declarationEndDate'] ?? '';
+                            if (!isset($candidates[$dedupeKey]) || $endDate > ($candidates[$dedupeKey]['declarationEndDate'] ?? '')) {
+                                $candidates[$dedupeKey] = $declaration;
+                            }
+                        }
 
-                                $this->line("  - Found expired declaration: {$declaration['declarationId']} (End date: {$declaration['declarationEndDate']})");
+                        foreach ($candidates as $declaration) {
+                            $expiredCount++;
+                            $this->line("  - Found expired declaration: {$declaration['declarationId']} (End date: {$declaration['declarationEndDate']}, Country: {$declaration['declarationPostingCountry']})");
 
                                 try {
                                     // Fetch full declaration details to get driverId and other required fields
@@ -135,6 +169,13 @@ class AutoSubmitExpiredDeclarations extends Command
                                     $newDeclarationData = $this->prepareNewDeclarationData($fullDeclaration, $today);
 
                                     $this->line("    Creating new declaration with start date: {$newDeclarationData['declarationStartDate']} and end date: {$newDeclarationData['declarationEndDate']}");
+
+                                    if ($dryRun) {
+                                        $this->info("    [dry-run] Would POST /declarations for driver {$driverId}, country {$newDeclarationData['declarationPostingCountry']}");
+                                        $createdCount++;
+                                        $submittedCount++;
+                                        continue;
+                                    }
 
                                     $createResult = $this->apiService->post('/declarations', $newDeclarationData);
 
@@ -164,10 +205,7 @@ class AutoSubmitExpiredDeclarations extends Command
                                 } catch (\Exception $e) {
                                     $errorCount++;
                                     $this->error("    ✗ Failed to create/submit new declaration for {$declaration['declarationId']}: " . $e->getMessage());
-
-                                 
                                 }
-                            }
                         }
                     }
 
@@ -213,31 +251,52 @@ class AutoSubmitExpiredDeclarations extends Command
     }
 
     /**
-     * Determine if a declaration should trigger creation of a new one
+     * Load the currently-authed user's plate register into an in-memory map so
+     * prepareNewDeclarationData() can split legacy plate lists into LIGHT vs HEAVY.
+     * Safe to fail — falls back to an empty map, in which case unknown plates default to HEAVY.
      */
-    private function shouldCreateNewDeclaration(array $declaration, string $yesterday): bool
+    private function loadPlateWeightMap(): void
     {
-        // Check if declaration has an end date
-        if (!isset($declaration['declarationEndDate']) || empty($declaration['declarationEndDate'])) {
+        $this->plateWeightMap = [];
+        try {
+            $items = $this->plateNumberService->all();
+            foreach ($items as $p) {
+                $plate = $p['plateNumber'] ?? null;
+                if (!$plate) continue;
+
+                $type = $p['plateNumberTransportType'] ?? $p['transportType'] ?? null;
+                $weight = $p['vehicleWeight'] ?? '';
+
+                if ($type === 'CARRIAGE_OF_PASSENGERS') {
+                    $this->plateWeightMap[$plate] = 'PASSENGERS';
+                } elseif ($type === 'CARRIAGE_OF_GOODS') {
+                    $this->plateWeightMap[$plate] = $weight === 'LIGHT' ? 'LIGHT' : 'HEAVY';
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('AUTO-SUBMIT: Failed to load plate register — legacy plates will default to HEAVY', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * True if the declaration expired between $sinceDate and $yesterday (inclusive)
+     * and is in a status we can renew from (EXPIRED or SUBMITTED).
+     */
+    private function isWithinExpiredRange(array $declaration, string $sinceDate, string $yesterday): bool
+    {
+        if (empty($declaration['declarationEndDate'])) {
             return false;
         }
 
-        // Check if end date was exactly yesterday
         $endDate = Carbon::parse($declaration['declarationEndDate'])->format('Y-m-d');
-        if ($endDate !== $yesterday) {
+        if ($endDate < $sinceDate || $endDate > $yesterday) {
             return false;
         }
 
-        // Check status - accept both EXPIRED and SUBMITTED (since API might not update status immediately)
-        $status = $declaration['declarationStatus'] ?? '';
-        $statusUpper = strtoupper($status);
-
-        // Allow EXPIRED or SUBMITTED declarations that ended yesterday
-        if ($statusUpper !== 'EXPIRED' && $statusUpper !== 'SUBMITTED') {
-            return false;
-        }
-
-        return true;
+        $status = strtoupper($declaration['declarationStatus'] ?? '');
+        return $status === 'EXPIRED' || $status === 'SUBMITTED';
     }
 
     /**
@@ -280,14 +339,56 @@ class AutoSubmitExpiredDeclarations extends Command
             'otherContactAsTransportManager' => $otherContactAsTransportManager,
         ];
 
-        // Carry forward whichever of the three plate fields the source declaration used.
-        // The /plate-numbers API split goods into light/heavy; passengers still use the
-        // legacy declarationVehiclePlateNumber. Copy only non-empty ones — the API rejects
-        // empty arrays for the fields it doesn't need.
-        foreach (['declarationVehiclePlateNumber', 'declarationVehiclePlateNumberLight', 'declarationVehiclePlateNumberHeavy'] as $plateField) {
-            if (!empty($originalDeclaration[$plateField])) {
-                $newData[$plateField] = $originalDeclaration[$plateField];
+        // Plate fields — the RTPD API (post 2026-06-30) requires goods declarations to use
+        // declarationVehiclePlateNumberLight / Heavy. Only passengers still use the legacy
+        // declarationVehiclePlateNumber. Old expired declarations that predate this change
+        // still carry all their plates in the legacy field, so we look them up in the
+        // /plate-numbers register and split them into the correct buckets here.
+        $transportTypes = $newData['declarationTransportType'] ?? [];
+        $isGoods = in_array('CARRIAGE_OF_GOODS', $transportTypes, true);
+        $isPassengers = in_array('CARRIAGE_OF_PASSENGERS', $transportTypes, true);
+
+        // Collect every plate the source declaration referenced (across all three fields).
+        $allPlates = array_unique(array_merge(
+            $originalDeclaration['declarationVehiclePlateNumber'] ?? [],
+            $originalDeclaration['declarationVehiclePlateNumberLight'] ?? [],
+            $originalDeclaration['declarationVehiclePlateNumberHeavy'] ?? [],
+        ));
+
+        if ($isGoods) {
+            $light = [];
+            $heavy = [];
+            foreach ($allPlates as $plate) {
+                $weight = $this->plateWeightMap[$plate] ?? null;
+                if ($weight === 'LIGHT') {
+                    $light[] = $plate;
+                } elseif ($weight === 'HEAVY') {
+                    $heavy[] = $plate;
+                } elseif ($weight === 'PASSENGERS') {
+                    // Registered as passengers only — can't be used for goods declarations
+                    continue;
+                } else {
+                    // Not found in register — default to HEAVY (most freight fleets) so the
+                    // API can still validate. If it doesn't exist in the register the API
+                    // will reject the whole declaration and log it either way.
+                    $heavy[] = $plate;
+                }
             }
+            if (!empty($light)) $newData['declarationVehiclePlateNumberLight'] = array_values(array_unique($light));
+            if (!empty($heavy)) $newData['declarationVehiclePlateNumberHeavy'] = array_values(array_unique($heavy));
+        }
+
+        if ($isPassengers) {
+            $passengers = [];
+            foreach ($allPlates as $plate) {
+                $weight = $this->plateWeightMap[$plate] ?? null;
+                // Include plates registered as passengers, plus unregistered plates as a
+                // fallback (same rationale as above).
+                if ($weight === 'PASSENGERS' || $weight === null) {
+                    $passengers[] = $plate;
+                }
+            }
+            if (!empty($passengers)) $newData['declarationVehiclePlateNumber'] = array_values(array_unique($passengers));
         }
 
         // Add optional contact fields if they exist
