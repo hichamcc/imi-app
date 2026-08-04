@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\DriverProfile;
+use App\Models\User;
 use App\Services\DeclarationService;
 use App\Services\DriverService;
 use App\Services\PlateNumberService;
+use App\Services\PostingApiService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -26,19 +28,29 @@ class DeclarationRenewalController extends Controller
         protected DriverService $driverService,
         protected DeclarationService $declarationService,
         protected PlateNumberService $plateNumberService,
+        protected PostingApiService $apiService,
     ) {}
 
     private const CUTOFF_DATE = '2026-06-22';
 
-    public function index()
+    public function index(Request $request)
     {
-        $data = $this->buildDriverReport();
+        $apiUsers = $this->credentialedUsers();
+        $selectedUserId = $request->integer('user_id') ?: (auth()->user()->hasValidApiCredentials() ? auth()->id() : ($apiUsers->first()->id ?? null));
+
+        $data = ['drivers' => [], 'totalDrivers' => 0, 'apiError' => null];
+        if ($selectedUserId) {
+            $this->useUserCredentials($selectedUserId);
+            $data = $this->buildDriverReport();
+        }
 
         return view('admin.declaration-renewals.index', [
             'drivers' => $data['drivers'],
             'cutoff' => self::CUTOFF_DATE,
             'totalDrivers' => $data['totalDrivers'],
             'apiError' => $data['apiError'] ?? null,
+            'apiUsers' => $apiUsers,
+            'selectedUserId' => $selectedUserId,
         ]);
     }
 
@@ -46,9 +58,16 @@ class DeclarationRenewalController extends Controller
      * Renew all expired-since-cutoff countries for a single driver, skipping any
      * country that already has an active SUBMITTED declaration.
      */
-    public function renewDriver(string $driverId)
+    public function renewDriver(Request $request, string $driverId)
     {
         try {
+            $userId = $request->integer('user_id') ?: (auth()->user()->hasValidApiCredentials() ? auth()->id() : null);
+            if (!$userId) {
+                return redirect()->route('admin.declaration-renewals.index')
+                    ->with('error', 'No API-credentialed user selected.');
+            }
+            $this->useUserCredentials($userId);
+
             $today = Carbon::today()->format('Y-m-d');
             $plateMap = $this->buildPlateWeightMap();
 
@@ -118,7 +137,7 @@ class DeclarationRenewalController extends Controller
             if ($skippedNoPlates > 0) $msg .= " Skipped {$skippedNoPlates} (no registered plates left).";
             if (!empty($errors)) $msg .= ' Errors: ' . implode(' | ', array_slice($errors, 0, 5)) . (count($errors) > 5 ? '…' : '');
 
-            return redirect()->route('admin.declaration-renewals.index')
+            return redirect()->route('admin.declaration-renewals.index', ['user_id' => $userId])
                 ->with(empty($errors) ? 'success' : 'error', $msg);
         } catch (\Throwable $e) {
             return redirect()->route('admin.declaration-renewals.index')
@@ -127,6 +146,32 @@ class DeclarationRenewalController extends Controller
     }
 
     // ---- helpers ----
+
+    /**
+     * Users that have a full set of RTPD API credentials. Feeds the org selector.
+     */
+    private function credentialedUsers()
+    {
+        return User::whereNotNull('api_key')
+            ->whereNotNull('api_operator_id')
+            ->whereNotNull('api_base_url')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+    }
+
+    /**
+     * Switch the shared PostingApiService singleton to a specific user's credentials.
+     * The other services (DeclarationService, DriverService, PlateNumberService) share
+     * this singleton, so they'll all hit that user's org.
+     */
+    private function useUserCredentials(int $userId): void
+    {
+        $user = User::findOrFail($userId);
+        if (!$user->api_key || !$user->api_operator_id || !$user->api_base_url) {
+            throw new \RuntimeException("User {$user->name} has incomplete API credentials.");
+        }
+        $this->apiService->setUserCredentials($user->api_base_url, $user->api_key, $user->api_operator_id);
+    }
 
     private function buildDriverReport(): array
     {

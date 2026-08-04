@@ -1,6 +1,6 @@
 <x-layouts.app :title="__('Declaration Renewals (Catch-up)')">
     <div class="flex h-full w-full flex-1 flex-col gap-6">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
             <div>
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ __('Declaration Renewals — Catch-up') }}</h1>
                 <p class="text-gray-600 dark:text-gray-400 text-sm">
@@ -8,6 +8,22 @@
                     <strong>{{ $cutoff }}</strong>.
                 </p>
             </div>
+            <form method="GET" action="{{ route('admin.declaration-renewals.index') }}" class="flex items-end gap-2">
+                <div>
+                    <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">{{ __('Organisation (API credentials)') }}</label>
+                    <select name="user_id" onchange="this.form.submit()"
+                            class="rounded-lg border border-gray-200 px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                        @if($apiUsers->isEmpty())
+                            <option value="">— {{ __('no users have API credentials') }} —</option>
+                        @endif
+                        @foreach($apiUsers as $u)
+                            <option value="{{ $u->id }}" {{ (int) $selectedUserId === (int) $u->id ? 'selected' : '' }}>
+                                {{ $u->name }} (ID: {{ $u->id }})
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </form>
         </div>
 
         @if(session('success'))
@@ -78,6 +94,7 @@
                                         <form method="POST" action="{{ route('admin.declaration-renewals.renew', $row['id']) }}"
                                               onsubmit="return confirm('{{ __('Renew') }} {{ count($row['expired_countries']) }} {{ __('country/ies for') }} {{ $row['name'] }}?');">
                                             @csrf
+                                            <input type="hidden" name="user_id" value="{{ $selectedUserId }}">
                                             <button type="submit"
                                                     class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded text-sm font-medium">
                                                 {{ __('Renew all') }} ({{ count($row['expired_countries']) }})
