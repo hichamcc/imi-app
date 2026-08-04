@@ -71,12 +71,21 @@ class DeclarationRenewalController extends Controller
             $today = Carbon::today()->format('Y-m-d');
             $plateMap = $this->buildPlateWeightMap();
 
+            $allDrivers = $this->fetchAllDrivers();
             $allDeclarations = $this->fetchAllDeclarations();
+
+            // Same name → driver map used by the index page to associate declarations
+            // (which lack driverId in the list response) to their driver.
+            $nameToDrivers = [];
+            foreach ($allDrivers as $driver) {
+                $key = strtolower(trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')));
+                if ($key !== '') $nameToDrivers[$key][] = $driver;
+            }
 
             // Countries this driver already has an active SUBMITTED declaration for.
             $activeCountries = [];
             foreach ($allDeclarations as $d) {
-                if (($d['driverId'] ?? null) !== $driverId) continue;
+                if ($this->resolveDeclarationDriverId($d, $nameToDrivers) !== $driverId) continue;
                 if (strtoupper($d['declarationStatus'] ?? '') !== 'SUBMITTED') continue;
                 if (($d['declarationEndDate'] ?? '') < $today) continue;
                 $activeCountries[strtoupper($d['declarationPostingCountry'] ?? '')] = true;
@@ -85,7 +94,7 @@ class DeclarationRenewalController extends Controller
             // Candidates: dedupe by country, keep the most recent expired end_date.
             $candidates = [];
             foreach ($allDeclarations as $d) {
-                if (($d['driverId'] ?? null) !== $driverId) continue;
+                if ($this->resolveDeclarationDriverId($d, $nameToDrivers) !== $driverId) continue;
                 $endDate = $d['declarationEndDate'] ?? '';
                 if ($endDate < self::CUTOFF_DATE || $endDate >= $today) continue;
                 $country = strtoupper($d['declarationPostingCountry'] ?? '');
@@ -148,6 +157,33 @@ class DeclarationRenewalController extends Controller
     // ---- helpers ----
 
     /**
+     * The /declarations LIST endpoint doesn't include driverId — it only has driverLatinFullName.
+     * Resolve to a driverId by looking up the name in the drivers register, tie-breaking on DOB.
+     */
+    private function resolveDeclarationDriverId(array $declaration, array $nameToDrivers): ?string
+    {
+        // Some flows may include it directly (e.g. from the FULL GET). Prefer that.
+        if (!empty($declaration['driverId'])) return $declaration['driverId'];
+
+        $fullName = trim($declaration['driverLatinFullName'] ?? '');
+        if ($fullName === '') return null;
+        $key = strtolower($fullName);
+        $matches = $nameToDrivers[$key] ?? [];
+        if (empty($matches)) return null;
+        if (count($matches) === 1) return $matches[0]['driverId'] ?? null;
+
+        // Multiple drivers with the same name — tie-break on DOB when both sides have it.
+        $dob = $declaration['driverDateOfBirth'] ?? null;
+        if ($dob) {
+            foreach ($matches as $d) {
+                if (($d['driverDateOfBirth'] ?? null) === $dob) return $d['driverId'] ?? null;
+            }
+        }
+        // Fallback: first match (same fallback DriverService uses).
+        return $matches[0]['driverId'] ?? null;
+    }
+
+    /**
      * Users that have a full set of RTPD API credentials. Feeds the org selector.
      */
     private function credentialedUsers()
@@ -184,10 +220,20 @@ class DeclarationRenewalController extends Controller
 
         $today = Carbon::today()->format('Y-m-d');
 
+        // The /declarations LIST response returns driverLatinFullName but no driverId.
+        // Build a name → driverId map so we can associate declarations to their driver.
+        // If the same name maps to multiple drivers, we tie-break by driverDateOfBirth.
+        $nameToDrivers = [];
+        foreach ($drivers as $driver) {
+            $key = strtolower(trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')));
+            if ($key === '') continue;
+            $nameToDrivers[$key][] = $driver;
+        }
+
         // driverId => ['active' => [country => true], 'expired' => [country => latest_end_date]]
         $perDriver = [];
         foreach ($declarations as $d) {
-            $driverId = $d['driverId'] ?? null;
+            $driverId = $this->resolveDeclarationDriverId($d, $nameToDrivers);
             if (!$driverId) continue;
             $country = strtoupper($d['declarationPostingCountry'] ?? '');
             $status = strtoupper($d['declarationStatus'] ?? '');
@@ -203,6 +249,7 @@ class DeclarationRenewalController extends Controller
             if ($endDate >= self::CUTOFF_DATE && $endDate < $today) {
                 $current = $perDriver[$driverId]['expired'][$country] ?? '';
                 if ($endDate > $current) {
+                    // Store the source declaration id alongside so renewDriver can find it later
                     $perDriver[$driverId]['expired'][$country] = $endDate;
                 }
             }
