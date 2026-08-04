@@ -95,6 +95,10 @@ class AutoSubmitExpiredDeclarations extends Command
                     // legacy `declarationVehiclePlateNumber` values into LIGHT/HEAVY for goods.
                     $this->loadPlateWeightMap();
 
+                    // Fetch all drivers so we can resolve driverId from declaration list responses
+                    // (the /declarations list only returns driverLatinFullName, not driverId).
+                    $nameToDrivers = $this->buildNameToDriversMap();
+
                     // Get ALL declarations for this user using pagination
                     $allDeclarations = [];
                     $startKey = null;
@@ -131,12 +135,15 @@ class AutoSubmitExpiredDeclarations extends Command
                         // Pre-scan: build a set of driver+country pairs that ALREADY have an active
                         // SUBMITTED declaration (end_date >= today). Those don't need renewal — skip
                         // them even if the range contains an older expired one for the same pair.
+                        // driverId is resolved by name lookup (list responses don't include it).
                         $activePairs = [];
                         foreach ($declarations['items'] as $declaration) {
                             $status = strtoupper($declaration['declarationStatus'] ?? '');
                             $endDate = $declaration['declarationEndDate'] ?? '';
                             if ($status !== 'SUBMITTED' || $endDate < $today) continue;
-                            $pairKey = ($declaration['driverId'] ?? 'no-driver') . '|' . ($declaration['declarationPostingCountry'] ?? '');
+                            $driverId = $this->resolveDeclarationDriverId($declaration, $nameToDrivers);
+                            if (!$driverId) continue;
+                            $pairKey = $driverId . '|' . ($declaration['declarationPostingCountry'] ?? '');
                             $activePairs[$pairKey] = true;
                         }
 
@@ -149,7 +156,9 @@ class AutoSubmitExpiredDeclarations extends Command
                             if (!$this->isWithinExpiredRange($declaration, $sinceDate, $yesterday)) {
                                 continue;
                             }
-                            $dedupeKey = ($declaration['driverId'] ?? 'no-driver') . '|' . ($declaration['declarationPostingCountry'] ?? '');
+                            $driverId = $this->resolveDeclarationDriverId($declaration, $nameToDrivers);
+                            if (!$driverId) continue;
+                            $dedupeKey = $driverId . '|' . ($declaration['declarationPostingCountry'] ?? '');
                             if (isset($activePairs[$dedupeKey])) {
                                 $skippedAlreadyActive++;
                                 continue;
@@ -318,6 +327,51 @@ class AutoSubmitExpiredDeclarations extends Command
         ]);
 
         return 0;
+    }
+
+    /**
+     * Build a "lowercase full name" → [driver, ...] map by paginating /drivers.
+     * The /declarations LIST endpoint returns driverLatinFullName but not driverId,
+     * so we need this map to associate declarations to their driver.
+     */
+    private function buildNameToDriversMap(): array
+    {
+        $map = [];
+        $startKey = null;
+        do {
+            $params = ['limit' => 250];
+            if ($startKey) $params['startKey'] = $startKey;
+            $batch = $this->apiService->get('/drivers', $params);
+            foreach ($batch['items'] ?? [] as $driver) {
+                $key = strtolower(trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')));
+                if ($key !== '') $map[$key][] = $driver;
+            }
+            $startKey = $batch['lastEvaluatedKey'] ?? null;
+        } while ($startKey);
+        return $map;
+    }
+
+    /**
+     * Resolve a declaration's driverId by name lookup (tie-break on driverDateOfBirth).
+     * Returns null if there's no name match or the name field is empty.
+     */
+    private function resolveDeclarationDriverId(array $declaration, array $nameToDrivers): ?string
+    {
+        if (!empty($declaration['driverId'])) return $declaration['driverId'];
+
+        $fullName = trim($declaration['driverLatinFullName'] ?? '');
+        if ($fullName === '') return null;
+        $matches = $nameToDrivers[strtolower($fullName)] ?? [];
+        if (empty($matches)) return null;
+        if (count($matches) === 1) return $matches[0]['driverId'] ?? null;
+
+        $dob = $declaration['driverDateOfBirth'] ?? null;
+        if ($dob) {
+            foreach ($matches as $d) {
+                if (($d['driverDateOfBirth'] ?? null) === $dob) return $d['driverId'] ?? null;
+            }
+        }
+        return $matches[0]['driverId'] ?? null;
     }
 
     /**
