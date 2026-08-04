@@ -95,6 +95,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
     Route::get('declarations/{declaration}/edit-submitted', [DeclarationController::class, 'editSubmitted'])->name('declarations.edit-submitted');
     Route::put('declarations/{declaration}/update-submitted', [DeclarationController::class, 'updateSubmitted'])->name('declarations.update-submitted');
     Route::post('declarations/{declaration}/withdraw', [DeclarationController::class, 'withdraw'])->name('declarations.withdraw');
+    Route::post('declarations/{declaration}/renew', [DeclarationController::class, 'renew'])->name('declarations.renew');
     Route::post('declarations/{declaration}/print', [DeclarationController::class, 'print'])->name('declarations.print');
     Route::post('declarations/bulk-delete', [DeclarationController::class, 'bulkDelete'])->name('declarations.bulk-delete');
     Route::post('declarations/bulk-withdraw', [DeclarationController::class, 'bulkWithdraw'])->name('declarations.bulk-withdraw');

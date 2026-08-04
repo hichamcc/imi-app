@@ -186,6 +186,18 @@
                                         </th>
                                     </tr>
                                 </thead>
+                                @php
+                                    // Countries that already have an active SUBMITTED declaration with a future end_date.
+                                    // Used to hide the "Renew" button on expired declarations that are already covered.
+                                    $todayStr = \Carbon\Carbon::today()->format('Y-m-d');
+                                    $activeCountriesSet = [];
+                                    foreach ($declarations as $d) {
+                                        if (($d['declarationStatus'] ?? '') === 'SUBMITTED'
+                                            && ($d['declarationEndDate'] ?? '') >= $todayStr) {
+                                            $activeCountriesSet[strtoupper($d['declarationPostingCountry'] ?? '')] = true;
+                                        }
+                                    }
+                                @endphp
                                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                     @foreach($declarations as $declaration)
                                         <tr>
@@ -243,6 +255,22 @@
                                                            class="text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300">
                                                             {{ __('Edit') }}
                                                         </a>
+                                                    @endif
+
+                                                    @php
+                                                        $status = $declaration['declarationStatus'] ?? '';
+                                                        $country = strtoupper($declaration['declarationPostingCountry'] ?? '');
+                                                        $canRenew = $status === 'EXPIRED' && !isset($activeCountriesSet[$country]);
+                                                    @endphp
+                                                    @if($canRenew)
+                                                        <span class="text-gray-300 dark:text-gray-600">|</span>
+                                                        <form method="POST" action="{{ route('declarations.renew', $declaration['declarationId']) }}" class="inline"
+                                                              onsubmit="return confirm('{{ __('Create and submit a new declaration for') }} {{ $country }} {{ __('with today\'s date?') }}');">
+                                                            @csrf
+                                                            <button type="submit" class="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300">
+                                                                {{ __('Renew') }}
+                                                            </button>
+                                                        </form>
                                                     @endif
                                                 </div>
                                             </td>

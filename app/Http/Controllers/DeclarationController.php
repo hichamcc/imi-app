@@ -513,6 +513,127 @@ class DeclarationController extends Controller
     }
 
     /**
+     * Manually renew an expired declaration — clones it with today's date, splits legacy
+     * plates into LIGHT/HEAVY for goods, drops unregistered plates, then submits. Same
+     * shape as the auto-submit command's per-declaration flow, but user-triggered.
+     */
+    public function renew(string $id)
+    {
+        try {
+            $original = $this->declarationService->getDeclaration($id);
+
+            if (!isset($original['driverId'])) {
+                return redirect()->back()->with('error', 'Declaration has no driverId — cannot renew.');
+            }
+
+            // Compute new date range: today → today + original duration (max 180 days).
+            $today = \Carbon\Carbon::today();
+            $originalStart = \Carbon\Carbon::parse($original['declarationStartDate']);
+            $originalEnd = \Carbon\Carbon::parse($original['declarationEndDate']);
+            $duration = min($originalStart->diffInDays($originalEnd), 180);
+            $newStart = $today->format('Y-m-d');
+            $newEnd = $today->copy()->addDays($duration)->format('Y-m-d');
+
+            // Contact fields — mirror auto-submit fallback: if the transport-manager flag is
+            // false but contact info is incomplete, flip it to true so validation passes.
+            $asTransportManager = $original['otherContactAsTransportManager'] ?? false;
+            if (!$asTransportManager) {
+                if (empty(trim($original['otherContactFirstName'] ?? '')) || empty(trim($original['otherContactLastName'] ?? ''))) {
+                    $asTransportManager = true;
+                }
+            }
+
+            $newData = [
+                'declarationPostingCountry' => $original['declarationPostingCountry'],
+                'declarationStartDate' => $newStart,
+                'declarationEndDate' => $newEnd,
+                'declarationOperationType' => $original['declarationOperationType'] ?? ['INTERNATIONAL_CARRIAGE'],
+                'declarationTransportType' => $original['declarationTransportType'] ?? ['CARRIAGE_OF_GOODS'],
+                'driverId' => $original['driverId'],
+                'otherContactAsTransportManager' => $asTransportManager,
+            ];
+            foreach (['otherContactFirstName', 'otherContactLastName', 'otherContactEmail', 'otherContactPhone'] as $f) {
+                if (isset($original[$f])) $newData[$f] = $original[$f];
+            }
+
+            // Split plates across the three fields using the /plate-numbers register.
+            $plateMap = $this->buildPlateWeightMap();
+            $allPlates = array_unique(array_merge(
+                $original['declarationVehiclePlateNumber'] ?? [],
+                $original['declarationVehiclePlateNumberLight'] ?? [],
+                $original['declarationVehiclePlateNumberHeavy'] ?? [],
+            ));
+            $transportTypes = $newData['declarationTransportType'];
+            $droppedPlates = [];
+
+            if (in_array('CARRIAGE_OF_GOODS', $transportTypes, true)) {
+                $light = $heavy = [];
+                foreach ($allPlates as $plate) {
+                    $w = $plateMap[$plate] ?? null;
+                    if ($w === 'LIGHT') $light[] = $plate;
+                    elseif ($w === 'HEAVY') $heavy[] = $plate;
+                    elseif ($w === 'PASSENGERS') continue;
+                    else $droppedPlates[] = $plate;
+                }
+                if (!empty($light)) $newData['declarationVehiclePlateNumberLight'] = array_values(array_unique($light));
+                if (!empty($heavy)) $newData['declarationVehiclePlateNumberHeavy'] = array_values(array_unique($heavy));
+            }
+            if (in_array('CARRIAGE_OF_PASSENGERS', $transportTypes, true)) {
+                $passengers = [];
+                foreach ($allPlates as $plate) {
+                    $w = $plateMap[$plate] ?? null;
+                    if ($w === 'PASSENGERS') $passengers[] = $plate;
+                }
+                if (!empty($passengers)) $newData['declarationVehiclePlateNumber'] = array_values(array_unique($passengers));
+            }
+
+            $hasAnyPlate = !empty($newData['declarationVehiclePlateNumber'])
+                || !empty($newData['declarationVehiclePlateNumberLight'])
+                || !empty($newData['declarationVehiclePlateNumberHeavy']);
+            if (!$hasAnyPlate) {
+                return redirect()->back()->with('error', 'Cannot renew: no registered plates on the source declaration. Push the plates to the IMI register first.');
+            }
+
+            $created = $this->declarationService->createDeclaration($newData);
+            $newId = $created['declarationId'] ?? null;
+            if (!$newId) {
+                return redirect()->back()->with('error', 'Renewal failed — API did not return a declarationId.');
+            }
+
+            $this->declarationService->submitDeclaration($newId);
+
+            $msg = 'Declaration renewed and submitted successfully.';
+            if (!empty($droppedPlates)) {
+                $msg .= ' Dropped ' . count($droppedPlates) . ' unregistered plate(s): ' . implode(', ', array_slice($droppedPlates, 0, 5)) . (count($droppedPlates) > 5 ? '…' : '');
+            }
+            return redirect()->route('declarations.show', $newId)->with('success', $msg);
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Renewal failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Build a plate → 'LIGHT' | 'HEAVY' | 'PASSENGERS' map from the /plate-numbers register.
+     */
+    private function buildPlateWeightMap(): array
+    {
+        $map = [];
+        try {
+            foreach ($this->plateNumberService->all() as $p) {
+                $plate = $p['plateNumber'] ?? null;
+                if (!$plate) continue;
+                $type = $p['plateNumberTransportType'] ?? $p['transportType'] ?? null;
+                $weight = $p['vehicleWeight'] ?? '';
+                if ($type === 'CARRIAGE_OF_PASSENGERS') $map[$plate] = 'PASSENGERS';
+                elseif ($type === 'CARRIAGE_OF_GOODS') $map[$plate] = $weight === 'LIGHT' ? 'LIGHT' : 'HEAVY';
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Failed to load plate register for manual renew', ['error' => $e->getMessage()]);
+        }
+        return $map;
+    }
+
+    /**
      * Withdraw a declaration
      */
     public function withdraw(string $id)
