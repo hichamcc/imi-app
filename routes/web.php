@@ -183,6 +183,12 @@ Route::middleware(['auth'])->group(function () {
         Route::post('users/{user}/toggle-payroll-access', [\App\Http\Controllers\Admin\UserController::class, 'togglePayrollAccess'])
             ->name('users.toggle-payroll-access');
 
+        // Temporary declaration-renewal catch-up tool (RTPD API migration)
+        Route::get('declaration-renewals', [\App\Http\Controllers\Admin\DeclarationRenewalController::class, 'index'])
+            ->name('declaration-renewals.index');
+        Route::post('declaration-renewals/{driverId}/renew', [\App\Http\Controllers\Admin\DeclarationRenewalController::class, 'renewDriver'])
+            ->name('declaration-renewals.renew');
+
         // Group Management Routes
         Route::post('groups', [UserGroupController::class, 'store'])->name('groups.store');
         Route::get('groups/{group}', [UserGroupController::class, 'show'])->name('groups.show');
