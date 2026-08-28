@@ -27,19 +27,29 @@ class DriverController extends Controller
     {
         $selectedIds = array_filter((array) $request->input('driver_ids', []));
 
-        // Fetch drivers. If specific IDs were selected we still pull all pages and filter
-        // in-memory — cheaper than N individual GET /drivers/{id} calls.
-        $drivers = [];
+        // Step 1: collect the driverIds to export from the (limited) list endpoint.
+        $driverIds = [];
         $startKey = null;
         do {
             $batch = $this->driverService->getDriversPaginated(250, $startKey);
             foreach ($batch['items'] ?? [] as $d) {
                 if (empty($selectedIds) || in_array($d['driverId'] ?? null, $selectedIds, true)) {
-                    $drivers[] = $d;
+                    if (!empty($d['driverId'])) $driverIds[] = $d['driverId'];
                 }
             }
             $startKey = $batch['lastEvaluatedKey'] ?? null;
         } while ($startKey);
+
+        // Step 2: fetch each driver's full record — the list endpoint doesn't include
+        // driverAddressCountry / driverDocumentIssuingCountry, only GET /drivers/{id} does.
+        $drivers = [];
+        foreach ($driverIds as $id) {
+            try {
+                $drivers[] = $this->driverService->getDriver($id);
+            } catch (\Throwable $e) {
+                \Log::warning('Driver export: failed to fetch full driver', ['driver_id' => $id, 'error' => $e->getMessage()]);
+            }
+        }
 
         // Sort by last name for consistent output
         usort($drivers, fn($a, $b) => strcmp($a['driverLatinLastName'] ?? '', $b['driverLatinLastName'] ?? ''));
