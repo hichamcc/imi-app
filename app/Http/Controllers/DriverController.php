@@ -18,6 +18,64 @@ class DriverController extends Controller
     }
 
     /**
+     * Export drivers to an Excel file.
+     * - `driver_ids[]` query param → export only those drivers
+     * - No `driver_ids` → export every driver in the current user's org (paginated fetch)
+     * Columns: Name, Date of Birth, Country, Nationality
+     */
+    public function exportExcel(Request $request)
+    {
+        $selectedIds = array_filter((array) $request->input('driver_ids', []));
+
+        // Fetch drivers. If specific IDs were selected we still pull all pages and filter
+        // in-memory — cheaper than N individual GET /drivers/{id} calls.
+        $drivers = [];
+        $startKey = null;
+        do {
+            $batch = $this->driverService->getDriversPaginated(250, $startKey);
+            foreach ($batch['items'] ?? [] as $d) {
+                if (empty($selectedIds) || in_array($d['driverId'] ?? null, $selectedIds, true)) {
+                    $drivers[] = $d;
+                }
+            }
+            $startKey = $batch['lastEvaluatedKey'] ?? null;
+        } while ($startKey);
+
+        // Sort by last name for consistent output
+        usort($drivers, fn($a, $b) => strcmp($a['driverLatinLastName'] ?? '', $b['driverLatinLastName'] ?? ''));
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Drivers');
+        $sheet->fromArray(['Name', 'Date of Birth', 'Country', 'Nationality'], null, 'A1');
+        $sheet->getStyle('A1:D1')->getFont()->setBold(true);
+
+        $r = 2;
+        foreach ($drivers as $d) {
+            $name = trim($d['driverFullName'] ?? (($d['driverLatinFirstName'] ?? '') . ' ' . ($d['driverLatinLastName'] ?? '')));
+            $sheet->setCellValue("A{$r}", $name);
+            $sheet->setCellValueExplicit("B{$r}", $d['driverDateOfBirth'] ?? '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue("C{$r}", strtoupper($d['driverAddressCountry'] ?? ''));
+            $sheet->setCellValue("D{$r}", strtoupper($d['driverDocumentIssuingCountry'] ?? ''));
+            $r++;
+        }
+
+        foreach (range('A', 'D') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        $scope = empty($selectedIds) ? 'all' : 'selected';
+        $filename = "drivers-{$scope}-" . now()->format('Y-m-d') . '.xlsx';
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
      * Display a listing of the resource.
      */
     public function index(Request $request)

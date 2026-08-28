@@ -10,6 +10,9 @@
                 <button id="bulkCloneBtn" onclick="openBulkCloneModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors hidden">
                     {{ __('Bulk Clone') }} (<span id="bulkCloneCount">0</span>)
                 </button>
+                <button id="exportExcelBtn" onclick="exportDriversExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    {{ __('Export Excel') }} <span id="exportExcelLabel" class="text-xs opacity-80">({{ __('all') }})</span>
+                </button>
                 <a href="{{ route('drivers.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                     {{ __('Add Driver') }}
                 </a>
@@ -902,6 +905,22 @@
             } else {
                 btn.classList.add('hidden');
             }
+
+            // Update the Export Excel button label to reflect current selection
+            const exportLabel = document.getElementById('exportExcelLabel');
+            if (exportLabel) {
+                exportLabel.textContent = count > 0
+                    ? `({{ __('selected') }}: ${count})`
+                    : `({{ __('all') }})`;
+            }
+        }
+
+        function exportDriversExcel() {
+            const checked = document.querySelectorAll('.driver-checkbox:checked');
+            const params = new URLSearchParams();
+            checked.forEach(cb => params.append('driver_ids[]', cb.value));
+            const url = '{{ route('drivers.export-excel') }}' + (params.toString() ? '?' + params.toString() : '');
+            window.location.href = url;
         }
 
         function getSelectedDrivers() {
