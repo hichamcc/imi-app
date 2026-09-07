@@ -125,6 +125,7 @@ Route::middleware(['auth', 'api.credentials'])->group(function () {
         Route::get('persons/{person}/files/{file}/download', [PersonController::class, 'downloadFile'])->name('persons.files.download');
         Route::delete('persons/{person}/files/{file}', [PersonController::class, 'deleteFile'])->name('persons.files.destroy');
         Route::post('persons/{person}/sync-to-imi', [PersonController::class, 'syncToImi'])->name('persons.sync-to-imi');
+        Route::post('persons/{person}/resync-from-imi', [PersonController::class, 'resyncFromImi'])->name('persons.resync-from-imi');
         Route::post('persons/{person}/link-to-imi', [PersonController::class, 'linkToImiDriver'])->name('persons.link-to-imi');
         Route::get('persons/{person}/contract.pdf', [PersonController::class, 'generateContract'])->name('persons.contract');
         Route::post('persons/{person}/contract.pdf', [PersonController::class, 'generateContract'])->name('persons.contract.post');

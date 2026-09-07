@@ -190,6 +190,29 @@ class PersonController extends Controller
             ->with('error', 'IMI sync failed: ' . $result['error']);
     }
 
+    /**
+     * Pull the latest data from the linked IMI driver and fill in any locally empty
+     * fields. Non-destructive — never overwrites data already entered by hand.
+     */
+    public function resyncFromImi(string $id)
+    {
+        $person = Person::where('user_id', auth()->id())->findOrFail($id);
+        $result = $this->personService->resyncFromImi($person);
+
+        if (!$result['success']) {
+            return redirect()->route('persons.show', $person->id)
+                ->with('error', 'Re-sync failed: ' . $result['error']);
+        }
+
+        if (empty($result['updated'])) {
+            return redirect()->route('persons.show', $person->id)
+                ->with('info', 'Re-sync complete — no empty fields to fill (all local data is already set).');
+        }
+
+        return redirect()->route('persons.show', $person->id)
+            ->with('success', 'Re-sync complete — filled: ' . implode(', ', $result['updated']));
+    }
+
     public function show(string $id)
     {
         $person = Person::where('user_id', auth()->id())->findOrFail($id);

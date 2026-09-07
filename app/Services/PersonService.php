@@ -121,6 +121,43 @@ class PersonService
     }
 
     /**
+     * Re-fetch the linked IMI driver and fill in any fields that are currently empty
+     * on the local Person. Non-destructive — never overwrites data the user edited by
+     * hand. Handles the "was imported before the mapping was complete" case.
+     */
+    public function resyncFromImi(Person $person): array
+    {
+        if (!$person->imi_driver_id) {
+            return ['success' => false, 'error' => 'Person is not linked to an IMI driver.', 'updated' => []];
+        }
+
+        try {
+            $driver = $this->driverService->getDriver($person->imi_driver_id);
+            $incoming = $this->fromImiDriver($driver);
+
+            // Only fill fields that are currently empty locally.
+            $updates = [];
+            foreach ($incoming as $field => $value) {
+                if (empty($value)) continue;              // nothing to copy in
+                if (!empty($person->{$field})) continue;  // local already has a value — keep it
+                $updates[$field] = $value;
+            }
+
+            if (empty($updates)) {
+                return ['success' => true, 'error' => null, 'updated' => []];
+            }
+
+            $person->update($updates);
+            $this->presenceLookup->bust();
+
+            return ['success' => true, 'error' => null, 'updated' => array_keys($updates)];
+        } catch (\Throwable $e) {
+            \Log::warning('Person re-sync from IMI failed', ['person_id' => $person->id, 'error' => $e->getMessage()]);
+            return ['success' => false, 'error' => $e->getMessage(), 'updated' => []];
+        }
+    }
+
+    /**
      * Push the person to IMI as a driver under the currently authenticated user's
      * credentials. Returns ['success' => bool, 'driver_id' => string|null, 'error' => string|null].
      */

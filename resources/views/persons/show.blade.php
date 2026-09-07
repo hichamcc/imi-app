@@ -197,6 +197,15 @@
                             @endif
                             <p class="mt-1 text-gray-500 dark:text-gray-400 text-xs font-mono break-all">{{ $person->imi_driver_id }}</p>
                         </div>
+
+                        <form method="POST" action="{{ route('persons.resync-from-imi', $person->id) }}" class="mt-4"
+                              onsubmit="return confirm('{{ __('Pull the latest data from IMI and fill in any empty fields on this person? Local edits will NOT be overwritten.') }}');">
+                            @csrf
+                            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-medium text-sm">
+                                {{ __('Re-sync from IMI') }}
+                            </button>
+                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ __('Fills empty fields only — never overwrites data already entered locally.') }}</p>
+                        </form>
                     @else
                         <p class="text-sm text-yellow-800 dark:text-yellow-300 mb-3">⚠️ {{ __('This person is not linked to an IMI driver yet.') }}</p>
                         <form method="POST" action="{{ route('persons.sync-to-imi', $person->id) }}">
