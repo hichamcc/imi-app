@@ -10,6 +10,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ])
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        apiPrefix: 'api/external',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
@@ -18,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api.credentials' => \App\Http\Middleware\EnsureApiCredentials::class,
             'admin' => \App\Http\Middleware\EnsureAdmin::class,
             'payroll' => \App\Http\Middleware\EnsurePayrollAccess::class,
+            'external.token' => \App\Http\Middleware\VerifyExternalApiToken::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

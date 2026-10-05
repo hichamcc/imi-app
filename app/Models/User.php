@@ -26,6 +26,7 @@ class User extends Authenticatable
         'api_key',
         'api_operator_id',
         'api_base_url',
+        'external_api_token',
         'applicable_law',
         'company_name',
         'company_registration',
@@ -49,6 +50,7 @@ class User extends Authenticatable
         'password',
         'remember_token',
         'api_key',
+        'external_api_token',
     ];
 
     /**
