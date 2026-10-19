@@ -79,12 +79,14 @@ class TachoActivityController extends Controller
         // 2. All declarations → map driver name → list of active (SUBMITTED, endDate >= today) countries.
         $activeByName = $this->activeCountriesByDriverName($todayStr);
 
-        // 3. MAPON drivers → lowercase full name → mapon driver record.
+        // 3. MAPON drivers → normalized full name → mapon driver record.
+        // Normalization strips diacritics + lowercases + collapses whitespace so that
+        // "Aidas Vaičius" (MAPON) matches "AIDAS VAICIUS" (IMI).
         $maponByName = [];
         foreach ($this->maponService->listDrivers() as $m) {
             $name = $this->maponDriverName($m);
             if ($name === '') continue;
-            $maponByName[strtolower($name)] = $m;
+            $maponByName[$this->normalizeName($name)] = $m;
         }
 
         $rows = [];
@@ -92,7 +94,7 @@ class TachoActivityController extends Controller
 
         foreach ($imiDrivers as $driver) {
             $fullName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
-            $key = strtolower($fullName);
+            $key = $this->normalizeName($fullName);
 
             $activeCountries = $activeByName[$key] ?? [];
             if (empty($activeCountries)) continue; // only drivers WITH active declarations
@@ -183,7 +185,7 @@ class TachoActivityController extends Controller
                 if (strtoupper($d['declarationStatus'] ?? '') !== 'SUBMITTED') continue;
                 if (($d['declarationEndDate'] ?? '') < $today) continue;
 
-                $name = strtolower(trim($d['driverLatinFullName'] ?? ''));
+                $name = $this->normalizeName($d['driverLatinFullName'] ?? '');
                 $country = strtoupper($d['declarationPostingCountry'] ?? '');
                 if ($name === '' || $country === '') continue;
 
@@ -194,6 +196,35 @@ class TachoActivityController extends Controller
 
         // De-dupe: keep lists of countries, not maps
         return array_map(fn($set) => array_keys($set), $byName);
+    }
+
+    /**
+     * Normalise a human name for matching across sources (MAPON vs IMI).
+     * - lowercase
+     * - strip diacritics (č→c, á→a, ö→o, …) via iconv transliteration
+     * - collapse all whitespace to single spaces
+     * Example: "Aidas Vaičius" and "AIDAS VAICIUS" both become "aidas vaicius".
+     */
+    private function normalizeName(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') return '';
+
+        // iconv transliteration — needs the "en_US.UTF-8" locale for the ASCII//TRANSLIT path.
+        $prev = setlocale(LC_CTYPE, 0);
+        setlocale(LC_CTYPE, 'en_US.UTF-8', 'C.UTF-8', 'C');
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name);
+        setlocale(LC_CTYPE, $prev);
+
+        if ($ascii === false || $ascii === null) $ascii = $name;
+
+        // Convert separators (hyphen, underscore, dot) to space so "Jean-François" and
+        // "Jean Francois" normalize the same.
+        $ascii = preg_replace('/[-_.]/', ' ', $ascii);
+        // iconv//TRANSLIT sometimes emits things like "c'" for č — drop remaining punctuation.
+        $ascii = preg_replace('/[^A-Za-z\s]/', '', $ascii);
+        $ascii = preg_replace('/\s+/', ' ', $ascii);
+        return strtolower(trim($ascii));
     }
 
     /**
