@@ -44,39 +44,43 @@
         @endif
 
         @if($stats)
-            @php
-                $baseParams = ['user_id' => $selectedUserId, 'window_days' => $windowDays];
-                $ringIfActive = fn($name) => $statusFilter === $name ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900' : '';
-            @endphp
-            <div class="grid grid-cols-4 gap-3">
-                {{-- "Checked" clears any filter (shows all) --}}
-                <a href="{{ route('admin.tacho-activity.index', $baseParams) }}"
-                   class="block bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow {{ $statusFilter === null ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900' : '' }}">
-                    <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">{{ __('Checked') }}</div>
-                    <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ $stats['checked'] }}</div>
-                </a>
-                <a href="{{ route('admin.tacho-activity.index', array_merge($baseParams, ['status' => 'active'])) }}"
-                   class="block bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 p-4 hover:shadow-md transition-shadow {{ $ringIfActive('active') }}">
-                    <div class="text-xs text-green-700 dark:text-green-300 uppercase">{{ __('Active') }}</div>
-                    <div class="text-2xl font-bold text-green-800 dark:text-green-200">{{ $stats['active'] }}</div>
-                </a>
-                <a href="{{ route('admin.tacho-activity.index', array_merge($baseParams, ['status' => 'stale'])) }}"
-                   class="block bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 p-4 hover:shadow-md transition-shadow {{ $ringIfActive('stale') }}">
-                    <div class="text-xs text-red-700 dark:text-red-300 uppercase">{{ __('Stale (>') }}{{ $windowDays }}d)</div>
-                    <div class="text-2xl font-bold text-red-800 dark:text-red-200">{{ $stats['stale'] }}</div>
-                </a>
-                <a href="{{ route('admin.tacho-activity.index', array_merge($baseParams, ['status' => 'no_mapon'])) }}"
-                   class="block bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800 p-4 hover:shadow-md transition-shadow {{ $ringIfActive('no_mapon') }}">
-                    <div class="text-xs text-yellow-700 dark:text-yellow-300 uppercase">{{ __('Not in MAPON') }}</div>
-                    <div class="text-2xl font-bold text-yellow-800 dark:text-yellow-200">{{ $stats['no_mapon'] }}</div>
-                </a>
-            </div>
-            @if($statusFilter)
-                <div class="text-xs text-gray-600 dark:text-gray-400">
-                    {{ __('Filtered by') }}: <strong>{{ $statusFilter }}</strong> ·
-                    <a href="{{ route('admin.tacho-activity.index', $baseParams) }}" class="text-blue-600 hover:underline">{{ __('clear filter') }}</a>
+            <div x-data="{ filter: null }" class="space-y-3">
+                <div class="grid grid-cols-4 gap-3">
+                    {{-- Cards toggle the Alpine `filter` state; clicking the same card again clears it. --}}
+                    <button type="button" @click="filter = null"
+                            :class="filter === null ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900' : ''"
+                            class="text-left block bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow">
+                        <div class="text-xs text-gray-500 dark:text-gray-400 uppercase">{{ __('Checked') }}</div>
+                        <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ $stats['checked'] }}</div>
+                    </button>
+                    <button type="button" @click="filter = filter === 'active' ? null : 'active'"
+                            :class="filter === 'active' ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900' : ''"
+                            class="text-left block bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 p-4 hover:shadow-md transition-shadow">
+                        <div class="text-xs text-green-700 dark:text-green-300 uppercase">{{ __('Active') }}</div>
+                        <div class="text-2xl font-bold text-green-800 dark:text-green-200">{{ $stats['active'] }}</div>
+                    </button>
+                    <button type="button" @click="filter = filter === 'stale' ? null : 'stale'"
+                            :class="filter === 'stale' ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900' : ''"
+                            class="text-left block bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 p-4 hover:shadow-md transition-shadow">
+                        <div class="text-xs text-red-700 dark:text-red-300 uppercase">{{ __('Stale (>') }}{{ $windowDays }}d)</div>
+                        <div class="text-2xl font-bold text-red-800 dark:text-red-200">{{ $stats['stale'] }}</div>
+                    </button>
+                    <button type="button" @click="filter = filter === 'no_mapon' ? null : 'no_mapon'"
+                            :class="filter === 'no_mapon' ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900' : ''"
+                            class="text-left block bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800 p-4 hover:shadow-md transition-shadow">
+                        <div class="text-xs text-yellow-700 dark:text-yellow-300 uppercase">{{ __('Not in MAPON') }}</div>
+                        <div class="text-2xl font-bold text-yellow-800 dark:text-yellow-200">{{ $stats['no_mapon'] }}</div>
+                    </button>
                 </div>
-            @endif
+
+                <div class="text-xs text-gray-600 dark:text-gray-400" x-show="filter !== null" x-cloak>
+                    {{ __('Filtered by') }}: <strong x-text="filter"></strong> ·
+                    <button type="button" @click="filter = null" class="text-blue-600 hover:underline">{{ __('clear filter') }}</button>
+                </div>
+
+                {{-- The table is reached via a sibling selector; filter visibility is driven by the Alpine scope above. --}}
+                <template x-effect="document.querySelectorAll('tr[data-status]').forEach(r => r.style.display = (!filter || r.dataset.status === filter) ? '' : 'none')"></template>
+            </div>
         @endif
 
         <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -94,7 +98,7 @@
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                             @foreach($drivers as $row)
-                                <tr>
+                                <tr data-status="{{ $row['status'] }}">
                                     <td class="px-4 py-3 align-top">
                                         <div class="font-medium text-gray-900 dark:text-white">{{ $row['name'] }}</div>
                                         @if($row['driver_id'])

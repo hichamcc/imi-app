@@ -37,9 +37,6 @@ class TachoActivityController extends Controller
         $windowDays = (int) ($request->get('window_days', 30));
         if ($windowDays < 1 || $windowDays > 365) $windowDays = 30;
 
-        $statusFilter = $request->get('status'); // 'active' | 'stale' | 'no_mapon' | null (all)
-        if (!in_array($statusFilter, ['active', 'stale', 'no_mapon'], true)) $statusFilter = null;
-
         $report = ['drivers' => [], 'error' => null, 'stats' => null];
         if ($selectedUserId) {
             try {
@@ -49,17 +46,11 @@ class TachoActivityController extends Controller
             }
         }
 
-        $allDrivers = $report['drivers'];
-        $visibleDrivers = $statusFilter
-            ? array_values(array_filter($allDrivers, fn($r) => $r['status'] === $statusFilter))
-            : $allDrivers;
-
         return view('admin.tacho-activity.index', [
             'apiUsers' => $apiUsers,
             'selectedUserId' => $selectedUserId,
             'windowDays' => $windowDays,
-            'statusFilter' => $statusFilter,
-            'drivers' => $visibleDrivers,
+            'drivers' => $report['drivers'],
             'stats' => $report['stats'],
             'error' => $report['error'],
             'maponConfigured' => $this->maponService->isConfigured(),
