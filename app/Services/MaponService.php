@@ -113,22 +113,37 @@ class MaponService
      */
     public function latestActivityDate($driverId, string $from, string $till, string $tz = 'Europe/Copenhagen'): ?string
     {
-        $response = $this->dailyActivities($driverId, $from, $till);
-
-        // Normalize: a single day object becomes a list of one.
-        $days = isset($response['activities']) ? [$response] : array_values(array_filter($response, 'is_array'));
-
+        // MAPON daily_activities limits the range to 31 days per request. For windows larger
+        // than that, split into 28-day chunks and take the max activity-end across chunks.
         $latestEnd = null;
-        foreach ($days as $day) {
-            foreach (($day['activities'] ?? []) as $a) {
-                $status = strtoupper(trim((string) ($a['status'] ?? '')));
-                $start = (int) ($a['start'] ?? 0);
-                $end = (int) ($a['end'] ?? 0);
 
-                if (!in_array($status, ['DRIVING', 'WORK', 'AVAILABLE'], true)) continue;
-                if ($end <= $start) continue;
+        foreach ($this->splitRange($from, $till, 28) as [$chunkFrom, $chunkTill]) {
+            try {
+                $response = $this->dailyActivities($driverId, $chunkFrom, $chunkTill);
+            } catch (\Throwable $e) {
+                Log::warning('MAPON daily_activities chunk failed', [
+                    'driver_id' => $driverId,
+                    'from' => $chunkFrom,
+                    'till' => $chunkTill,
+                    'error' => $e->getMessage(),
+                ]);
+                continue;
+            }
 
-                if ($latestEnd === null || $end > $latestEnd) $latestEnd = $end;
+            // Normalize: a single day object becomes a list of one.
+            $days = isset($response['activities']) ? [$response] : array_values(array_filter($response, 'is_array'));
+
+            foreach ($days as $day) {
+                foreach (($day['activities'] ?? []) as $a) {
+                    $status = strtoupper(trim((string) ($a['status'] ?? '')));
+                    $start = (int) ($a['start'] ?? 0);
+                    $end = (int) ($a['end'] ?? 0);
+
+                    if (!in_array($status, ['DRIVING', 'WORK', 'AVAILABLE'], true)) continue;
+                    if ($end <= $start) continue;
+
+                    if ($latestEnd === null || $end > $latestEnd) $latestEnd = $end;
+                }
             }
         }
 
@@ -140,6 +155,26 @@ class MaponService
                 ->format('Y-m-d');
         } catch (\Throwable $e) {
             return date('Y-m-d', $latestEnd);
+        }
+    }
+
+    /**
+     * Split a date range into inclusive chunks no larger than $chunkDays days each.
+     * Yields pairs of [YYYY-MM-DD, YYYY-MM-DD] covering the full span without overlap.
+     * Accepts either YYYY-MM-DD or ISO 8601 UTC strings on input.
+     */
+    private function splitRange(string $from, string $till, int $chunkDays): \Generator
+    {
+        $start = new \DateTimeImmutable(substr($from, 0, 10));
+        $end = new \DateTimeImmutable(substr($till, 0, 10));
+        if ($start > $end) return;
+
+        $cursor = $start;
+        while ($cursor <= $end) {
+            $chunkEnd = $cursor->modify('+' . ($chunkDays - 1) . ' days');
+            if ($chunkEnd > $end) $chunkEnd = $end;
+            yield [$cursor->format('Y-m-d'), $chunkEnd->format('Y-m-d')];
+            $cursor = $chunkEnd->modify('+1 day');
         }
     }
 
