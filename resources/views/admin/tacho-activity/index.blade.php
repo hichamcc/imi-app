@@ -32,6 +32,13 @@
             </form>
         </div>
 
+        @if(session('success'))
+            <div class="bg-green-50 border border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300 px-4 py-3 rounded-lg text-sm">{{ session('success') }}</div>
+        @endif
+        @if(session('error'))
+            <div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-sm">{{ session('error') }}</div>
+        @endif
+
         @if(!$maponConfigured)
             <div class="bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
                 ⚠️ {{ __('MAPON_API_KEY is not set in .env — nothing to cross-check against. Add it and reload this page.') }}
@@ -94,6 +101,7 @@
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{{ __('MAPON match') }}</th>
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{{ __('Last activity') }}</th>
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{{ __('Status') }}</th>
+                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">{{ __('Actions') }}</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -140,6 +148,18 @@
                                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
                                                 🟢 {{ __('Active') }}
                                             </span>
+                                        @endif
+                                    </td>
+                                    <td class="px-4 py-3 align-top text-right">
+                                        @if($row['status'] === 'stale' && $row['driver_id'] && count($row['active_countries']) > 0)
+                                            <form method="POST" action="{{ route('admin.tacho-activity.withdraw', $row['driver_id']) }}" class="inline"
+                                                  onsubmit="return confirm('{{ __('Withdraw') }} {{ count($row['active_countries']) }} {{ __('active declaration(s) for') }} {{ addslashes($row['name']) }}? {{ __('This cannot be undone from here.') }}');">
+                                                @csrf
+                                                <input type="hidden" name="user_id" value="{{ $selectedUserId }}">
+                                                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-medium">
+                                                    {{ __('Withdraw all') }} ({{ count($row['active_countries']) }})
+                                                </button>
+                                            </form>
                                         @endif
                                     </td>
                                 </tr>

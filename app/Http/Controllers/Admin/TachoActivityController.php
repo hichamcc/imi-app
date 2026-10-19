@@ -25,6 +25,72 @@ class TachoActivityController extends Controller
         protected MaponService $maponService,
     ) {}
 
+    /**
+     * Withdraw every active SUBMITTED declaration for the given driver.
+     * Called from the Tacho Activity report for drivers flagged "inactive" (no tacho
+     * activity in the window). The declarations are withdrawn one-by-one; a per-call
+     * failure doesn't abort the rest.
+     */
+    public function withdrawDriver(Request $request, string $driverId)
+    {
+        $userId = (int) $request->input('user_id', 0);
+        if ($userId <= 0) {
+            return redirect()->route('admin.tacho-activity.index')
+                ->with('error', 'Missing user_id — cannot determine which org to act on.');
+        }
+
+        $owner = User::find($userId);
+        if (!$owner || !$owner->hasValidApiCredentials()) {
+            return redirect()->route('admin.tacho-activity.index', ['user_id' => $userId])
+                ->with('error', 'Selected organisation has incomplete IMI API credentials.');
+        }
+        $this->apiService->setUserCredentials($owner->api_base_url, $owner->api_key, $owner->api_operator_id);
+
+        $today = Carbon::today()->format('Y-m-d');
+        $withdrawn = 0;
+        $errors = [];
+
+        // Fetch all active SUBMITTED declarations for this driver, across pages.
+        $toWithdraw = [];
+        $startKey = null;
+        do {
+            $batch = $this->declarationService->getDeclarationsPaginated(250, $startKey, ['driverId' => $driverId]);
+            foreach ($batch['items'] ?? [] as $d) {
+                if (strtoupper($d['declarationStatus'] ?? '') !== 'SUBMITTED') continue;
+                if (($d['declarationEndDate'] ?? '') < $today) continue;
+                $toWithdraw[] = $d;
+            }
+            $startKey = $batch['lastEvaluatedKey'] ?? null;
+        } while ($startKey);
+
+        foreach ($toWithdraw as $d) {
+            $declarationId = $d['declarationId'];
+            try {
+                $this->declarationService->withdrawDeclaration($declarationId);
+                $withdrawn++;
+                \Log::info('Tacho report: withdrew declaration', [
+                    'admin_user_id' => auth()->id(),
+                    'org_user_id' => $userId,
+                    'driver_id' => $driverId,
+                    'declaration_id' => $declarationId,
+                    'country' => $d['declarationPostingCountry'] ?? null,
+                ]);
+            } catch (\Throwable $e) {
+                $errors[] = ($d['declarationPostingCountry'] ?? '??') . ': ' . $e->getMessage();
+                \Log::warning('Tacho report: withdraw failed', [
+                    'declaration_id' => $declarationId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $msg = "Withdrew {$withdrawn} of " . count($toWithdraw) . " declaration(s) for driver.";
+        if (!empty($errors)) $msg .= ' Errors: ' . implode(' | ', array_slice($errors, 0, 5)) . (count($errors) > 5 ? '…' : '');
+
+        return redirect()->route('admin.tacho-activity.index', ['user_id' => $userId])
+            ->with(empty($errors) ? 'success' : 'error', $msg);
+    }
+
     public function index(Request $request)
     {
         $apiUsers = User::whereNotNull('api_key')

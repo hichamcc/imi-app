@@ -194,6 +194,8 @@ Route::middleware(['auth'])->group(function () {
         // Tacho activity cross-check (IMI active declarations × MAPON recent activity)
         Route::get('tacho-activity', [\App\Http\Controllers\Admin\TachoActivityController::class, 'index'])
             ->name('tacho-activity.index');
+        Route::post('tacho-activity/{driverId}/withdraw', [\App\Http\Controllers\Admin\TachoActivityController::class, 'withdrawDriver'])
+            ->name('tacho-activity.withdraw');
 
         // Group Management Routes
         Route::post('groups', [UserGroupController::class, 'store'])->name('groups.store');
