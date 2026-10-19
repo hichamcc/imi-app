@@ -229,12 +229,25 @@ class TachoActivityController extends Controller
 
     /**
      * Extract a full name from a MAPON driver record (shapes vary).
+     * MAPON's primary shape is {name: <first>, surname: <last>} — treat those as first/last,
+     * not full name. Fall back to common first/last variants, then to a bare `full_name`.
      */
     private function maponDriverName(array $m): string
     {
-        if (!empty($m['name'])) return trim($m['name']);
-        $first = $m['first_name'] ?? $m['firstname'] ?? '';
-        $last = $m['last_name'] ?? $m['lastname'] ?? '';
-        return trim("{$first} {$last}");
+        $first = $m['name']
+            ?? $m['first_name']
+            ?? $m['firstname']
+            ?? $m['first']
+            ?? '';
+        $last = $m['surname']
+            ?? $m['last_name']
+            ?? $m['lastname']
+            ?? $m['last']
+            ?? '';
+
+        $combined = trim("{$first} {$last}");
+        if ($combined !== '') return $combined;
+
+        return trim($m['full_name'] ?? '');
     }
 }
