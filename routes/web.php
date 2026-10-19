@@ -191,6 +191,10 @@ Route::middleware(['auth'])->group(function () {
         Route::post('declaration-renewals/{driverId}/renew', [\App\Http\Controllers\Admin\DeclarationRenewalController::class, 'renewDriver'])
             ->name('declaration-renewals.renew');
 
+        // Tacho activity cross-check (IMI active declarations × MAPON recent activity)
+        Route::get('tacho-activity', [\App\Http\Controllers\Admin\TachoActivityController::class, 'index'])
+            ->name('tacho-activity.index');
+
         // Group Management Routes
         Route::post('groups', [UserGroupController::class, 'store'])->name('groups.store');
         Route::get('groups/{group}', [UserGroupController::class, 'show'])->name('groups.show');

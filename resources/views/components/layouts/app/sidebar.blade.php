@@ -22,6 +22,12 @@
                         <x-navlist.item before="phosphor-user-gear" :href="route('admin.users.index')" :current="request()->routeIs('admin.users.*')">
                             {{ __('User Management') }}
                         </x-navlist.item>
+                        <x-navlist.item before="phosphor-arrows-clockwise" :href="route('admin.declaration-renewals.index')" :current="request()->routeIs('admin.declaration-renewals.*')">
+                            {{ __('Declaration Renewals') }}
+                        </x-navlist.item>
+                        <x-navlist.item before="phosphor-chart-line" :href="route('admin.tacho-activity.index')" :current="request()->routeIs('admin.tacho-activity.*')">
+                            {{ __('Tacho Activity') }}
+                        </x-navlist.item>
                     </x-navlist.group>
                 @else
                     <x-navlist.group :heading="__('Platform')">
