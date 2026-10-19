@@ -78,96 +78,80 @@ class MaponService
     }
 
     /**
-     * Get daily activity intervals for a single driver between two dates (inclusive).
-     * @param  string|int  $driverId  MAPON driver id
-     * @param  string      $from      ISO date (YYYY-MM-DD) or ISO datetime
-     * @param  string      $till      ISO date (YYYY-MM-DD) or ISO datetime
-     * @return array                  Raw `data` payload from MAPON (empty array on failure).
+     * Get daily activity intervals for a single driver.
+     *
+     * IMPORTANT (from the sister tacho app's hard-won experience):
+     * - `from`/`till` must be ISO 8601 UTC datetime (not YYYY-MM-DD): "2026-09-07T00:00:00Z"
+     * - Max 31 days per request; the range is snapped to whole days
+     * - Response is a BARE JSON ARRAY of days — NO `data` wrapper (unlike driver/list)
+     * - Errors can arrive with HTTP 200 as `{"error":{"code":…,"msg":…}}`
      */
     public function dailyActivities($driverId, string $from, string $till): array
     {
+        // Accept YYYY-MM-DD and promote to ISO datetime; pass through if already ISO.
+        $fromIso = $this->toIsoUtc($from);
+        $tillIso = $this->toIsoUtc($till, '23:59:59');
+
         $data = $this->get('driver/daily_activities', [
             'driver' => (string) $driverId,
-            'from' => $from,
-            'till' => $till,
+            'from' => $fromIso,
+            'till' => $tillIso,
         ]);
-        return $data['data'] ?? [];
+
+        // Bare array response → return as-is. Wrapped response → unwrap.
+        if (isset($data['data'])) return (array) $data['data'];
+        return $data;
     }
 
     /**
-     * Returns the latest activity date (YYYY-MM-DD) in the given range for a driver,
-     * or null if the driver has no activity in that window.
-     * Robust against the two most common MAPON response shapes.
+     * Returns the latest "active" date (YYYY-MM-DD, local tz) in the range for a driver,
+     * or null if the driver has NO qualifying activity. Rules from the tacho app:
+     *   - count only status in {DRIVING, WORK, AVAILABLE}
+     *   - require end > start (reject zero/negative length records)
+     *   - ignore REST + source=unkn (Mapon's gap filler = "no data", not rest)
+     *   - ignore unknown status strings like "0" and card events
      */
-    public function latestActivityDate($driverId, string $from, string $till): ?string
+    public function latestActivityDate($driverId, string $from, string $till, string $tz = 'Europe/Copenhagen'): ?string
     {
-        $data = $this->dailyActivities($driverId, $from, $till);
-        $latest = $this->extractLatestDate($data);
+        $response = $this->dailyActivities($driverId, $from, $till);
 
-        // One-time debug log for the FIRST non-empty response, success or failure, so we
-        // can confirm the actual shape. Clears itself once we see data with a valid date.
-        static $loggedFirstNonEmpty = false;
-        if (!$loggedFirstNonEmpty && !empty($data)) {
-            Log::info('MAPON daily_activities — sample payload', [
-                'driver_id' => $driverId,
-                'latest_extracted' => $latest,
-                'top_keys' => is_array($data) ? array_keys($data) : [],
-                'sample' => $this->truncateForLog($data),
-            ]);
-            $loggedFirstNonEmpty = true;
+        // Normalize: a single day object becomes a list of one.
+        $days = isset($response['activities']) ? [$response] : array_values(array_filter($response, 'is_array'));
+
+        $latestEnd = null;
+        foreach ($days as $day) {
+            foreach (($day['activities'] ?? []) as $a) {
+                $status = strtoupper(trim((string) ($a['status'] ?? '')));
+                $start = (int) ($a['start'] ?? 0);
+                $end = (int) ($a['end'] ?? 0);
+
+                if (!in_array($status, ['DRIVING', 'WORK', 'AVAILABLE'], true)) continue;
+                if ($end <= $start) continue;
+
+                if ($latestEnd === null || $end > $latestEnd) $latestEnd = $end;
+            }
         }
 
-        return $latest;
-    }
+        if ($latestEnd === null) return null;
 
-    /**
-     * Pull a YYYY-MM-DD date out of whatever shape MAPON gives us for daily_activities.
-     * Looks for timestamps on days/intervals/activities and returns the latest found.
-     */
-    private function extractLatestDate(array $data): ?string
-    {
-        $latest = null;
-        $this->walkForDates($data, $latest);
-        return $latest;
-    }
-
-    /**
-     * Recursively walk the response looking for anything that smells like a date.
-     * Picks up keys named 'date', 'start', 'from', 'ts', 'timestamp' at any depth.
-     * Flexible enough to handle MAPON shape variants without re-coding each one.
-     */
-    private function walkForDates($node, ?string &$latest): void
-    {
-        if (!is_array($node)) return;
-
-        foreach ($node as $key => $value) {
-            if (is_array($value)) {
-                $this->walkForDates($value, $latest);
-                continue;
-            }
-            // Only consider string/int date-ish values on known keys.
-            if (!is_string($value) && !is_int($value)) continue;
-
-            $date = null;
-            if (in_array($key, ['date', 'day'], true) && is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}/', $value)) {
-                $date = substr($value, 0, 10);
-            } elseif (in_array($key, ['start', 'from', 'till', 'end', 'start_time', 'end_time'], true) && is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}/', $value)) {
-                $date = substr($value, 0, 10);
-            } elseif (in_array($key, ['ts', 'timestamp', 'start_ts', 'end_ts'], true) && is_numeric($value) && (int) $value > 1_000_000_000) {
-                $date = date('Y-m-d', (int) $value);
-            }
-
-            if ($date !== null && ($latest === null || $date > $latest)) {
-                $latest = $date;
-            }
+        try {
+            return (new \DateTimeImmutable('@' . $latestEnd))
+                ->setTimezone(new \DateTimeZone($tz))
+                ->format('Y-m-d');
+        } catch (\Throwable $e) {
+            return date('Y-m-d', $latestEnd);
         }
     }
 
-    private function truncateForLog($data): string
+    private function toIsoUtc(string $input, string $defaultTime = '00:00:00'): string
     {
-        $json = json_encode($data);
-        if (strlen($json) > 2000) $json = substr($json, 0, 2000) . '…(truncated)';
-        return $json;
+        // Already ISO? pass through.
+        if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', $input)) return $input;
+        // Plain date → datetime at midnight UTC (or end-of-day for till).
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $input)) return $input . 'T' . $defaultTime . 'Z';
+        // Fall back to Carbon/strtotime.
+        $ts = strtotime($input);
+        return gmdate('Y-m-d\TH:i:s\Z', $ts ?: time());
     }
 
     // ---- internal ----
@@ -185,6 +169,12 @@ class MaponService
             $decoded = json_decode($body, true);
             if (!is_array($decoded)) {
                 throw new \RuntimeException("MAPON {$path}: non-JSON response");
+            }
+            // MAPON reports errors in the body — sometimes with HTTP 200.
+            if (isset($decoded['error'])) {
+                $code = (int) ($decoded['error']['code'] ?? 0);
+                $msg = (string) ($decoded['error']['msg'] ?? 'Unknown MAPON error');
+                throw new \RuntimeException("MAPON {$path} error {$code}: {$msg}");
             }
             return $decoded;
         } catch (GuzzleException $e) {
