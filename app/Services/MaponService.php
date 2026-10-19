@@ -104,18 +104,17 @@ class MaponService
         $data = $this->dailyActivities($driverId, $from, $till);
         $latest = $this->extractLatestDate($data);
 
-        // One-time debug log for the first driver whose shape we don't understand.
-        // Helps iterate when a new MAPON tenant returns a shape we haven't seen.
-        if ($latest === null && !empty($data)) {
-            static $logged = false;
-            if (!$logged) {
-                Log::info('MAPON daily_activities — no date extracted; sample payload', [
-                    'driver_id' => $driverId,
-                    'top_keys' => is_array($data) ? array_keys($data) : [],
-                    'sample' => $this->truncateForLog($data),
-                ]);
-                $logged = true;
-            }
+        // One-time debug log for the FIRST non-empty response, success or failure, so we
+        // can confirm the actual shape. Clears itself once we see data with a valid date.
+        static $loggedFirstNonEmpty = false;
+        if (!$loggedFirstNonEmpty && !empty($data)) {
+            Log::info('MAPON daily_activities — sample payload', [
+                'driver_id' => $driverId,
+                'latest_extracted' => $latest,
+                'top_keys' => is_array($data) ? array_keys($data) : [],
+                'sample' => $this->truncateForLog($data),
+            ]);
+            $loggedFirstNonEmpty = true;
         }
 
         return $latest;
