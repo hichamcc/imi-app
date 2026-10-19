@@ -102,33 +102,73 @@ class MaponService
     public function latestActivityDate($driverId, string $from, string $till): ?string
     {
         $data = $this->dailyActivities($driverId, $from, $till);
+        $latest = $this->extractLatestDate($data);
 
-        // Common shape 1: { data: { days: [ { date: 'YYYY-MM-DD', intervals: [...] }, ... ] } }
-        $days = $data['days'] ?? ($data[0]['days'] ?? null);
-        $latest = null;
-
-        if (is_array($days)) {
-            foreach ($days as $day) {
-                $date = $day['date'] ?? null;
-                if (!$date) continue;
-                // Only count the day if it has any intervals (any activity).
-                $hasAny = !empty($day['intervals']) || !empty($day['activities']);
-                if ($hasAny && ($latest === null || $date > $latest)) {
-                    $latest = $date;
-                }
+        // One-time debug log for the first driver whose shape we don't understand.
+        // Helps iterate when a new MAPON tenant returns a shape we haven't seen.
+        if ($latest === null && !empty($data)) {
+            static $logged = false;
+            if (!$logged) {
+                Log::info('MAPON daily_activities — no date extracted; sample payload', [
+                    'driver_id' => $driverId,
+                    'top_keys' => is_array($data) ? array_keys($data) : [],
+                    'sample' => $this->truncateForLog($data),
+                ]);
+                $logged = true;
             }
-            return $latest;
         }
 
-        // Fallback: flat intervals list with timestamps.
-        $intervals = $data['intervals'] ?? [];
-        foreach ($intervals as $iv) {
-            $date = isset($iv['start']) ? substr($iv['start'], 0, 10) : null;
-            if ($date && ($latest === null || $date > $latest)) {
+        return $latest;
+    }
+
+    /**
+     * Pull a YYYY-MM-DD date out of whatever shape MAPON gives us for daily_activities.
+     * Looks for timestamps on days/intervals/activities and returns the latest found.
+     */
+    private function extractLatestDate(array $data): ?string
+    {
+        $latest = null;
+        $this->walkForDates($data, $latest);
+        return $latest;
+    }
+
+    /**
+     * Recursively walk the response looking for anything that smells like a date.
+     * Picks up keys named 'date', 'start', 'from', 'ts', 'timestamp' at any depth.
+     * Flexible enough to handle MAPON shape variants without re-coding each one.
+     */
+    private function walkForDates($node, ?string &$latest): void
+    {
+        if (!is_array($node)) return;
+
+        foreach ($node as $key => $value) {
+            if (is_array($value)) {
+                $this->walkForDates($value, $latest);
+                continue;
+            }
+            // Only consider string/int date-ish values on known keys.
+            if (!is_string($value) && !is_int($value)) continue;
+
+            $date = null;
+            if (in_array($key, ['date', 'day'], true) && is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}/', $value)) {
+                $date = substr($value, 0, 10);
+            } elseif (in_array($key, ['start', 'from', 'till', 'end', 'start_time', 'end_time'], true) && is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}/', $value)) {
+                $date = substr($value, 0, 10);
+            } elseif (in_array($key, ['ts', 'timestamp', 'start_ts', 'end_ts'], true) && is_numeric($value) && (int) $value > 1_000_000_000) {
+                $date = date('Y-m-d', (int) $value);
+            }
+
+            if ($date !== null && ($latest === null || $date > $latest)) {
                 $latest = $date;
             }
         }
-        return $latest;
+    }
+
+    private function truncateForLog($data): string
+    {
+        $json = json_encode($data);
+        if (strlen($json) > 2000) $json = substr($json, 0, 2000) . '…(truncated)';
+        return $json;
     }
 
     // ---- internal ----
