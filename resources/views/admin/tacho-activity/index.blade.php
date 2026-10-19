@@ -62,7 +62,7 @@
                     <button type="button" @click="filter = filter === 'stale' ? null : 'stale'"
                             :class="filter === 'stale' ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-900' : ''"
                             class="text-left block bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 p-4 hover:shadow-md transition-shadow">
-                        <div class="text-xs text-red-700 dark:text-red-300 uppercase">{{ __('Stale (>') }}{{ $windowDays }}d)</div>
+                        <div class="text-xs text-red-700 dark:text-red-300 uppercase">{{ __('Inactive (>') }}{{ $windowDays }}d)</div>
                         <div class="text-2xl font-bold text-red-800 dark:text-red-200">{{ $stats['stale'] }}</div>
                     </button>
                     <button type="button" @click="filter = filter === 'no_mapon' ? null : 'no_mapon'"
@@ -130,7 +130,7 @@
                                     <td class="px-4 py-3 align-top">
                                         @if($row['status'] === 'stale')
                                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">
-                                                🔴 {{ __('Stale') }}
+                                                🔴 {{ __('Inactive') }}
                                             </span>
                                         @elseif($row['status'] === 'no_mapon')
                                             <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300">
