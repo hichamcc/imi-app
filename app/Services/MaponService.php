@@ -47,21 +47,34 @@ class MaponService
      */
     public function listDrivers(): array
     {
-        $data = $this->get('driver/list');
-        // Known shapes: { data: { units: [{driver: {...}}, ...] } } or { data: { drivers: [...] } }
-        $data = $data['data'] ?? $data;
+        $raw = $this->get('driver/list');
+        $data = $raw['data'] ?? $raw;
+
+        $drivers = [];
+
+        // Shape A: { data: { drivers: [{id, name, ...}, ...] } }
         if (isset($data['drivers']) && is_array($data['drivers'])) {
-            return $data['drivers'];
+            $drivers = $data['drivers'];
         }
-        if (isset($data['units']) && is_array($data['units'])) {
-            // Flatten units[].driver into a drivers array
-            $out = [];
+        // Shape B: { data: { units: [{driver: {...}}, ...] } }
+        elseif (isset($data['units']) && is_array($data['units'])) {
             foreach ($data['units'] as $unit) {
-                if (!empty($unit['driver'])) $out[] = $unit['driver'];
+                if (!empty($unit['driver'])) $drivers[] = $unit['driver'];
             }
-            return $out;
         }
-        return [];
+        // Shape C: { data: [{id, name, ...}, ...] } — bare array
+        elseif (is_array($data) && isset($data[0]) && is_array($data[0])) {
+            $drivers = $data;
+        }
+
+        Log::info('MAPON driver/list parsed', [
+            'top_level_keys' => array_keys(is_array($raw) ? $raw : []),
+            'data_keys' => is_array($data) ? array_keys($data) : [],
+            'drivers_count' => count($drivers),
+            'first_driver_sample' => $drivers[0] ?? null,
+        ]);
+
+        return $drivers;
     }
 
     /**
