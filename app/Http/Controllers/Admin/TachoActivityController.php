@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\DriverMaponLink;
 use App\Models\User;
 use App\Services\DeclarationService;
 use App\Services\DriverService;
@@ -91,6 +92,40 @@ class TachoActivityController extends Controller
             ->with(empty($errors) ? 'success' : 'error', $msg);
     }
 
+    /**
+     * Persist a manual IMI driver → MAPON driver link accepted from the "Did you mean?"
+     * suggestions. Overrides automatic name matching next time the report is built.
+     */
+    public function linkDriver(Request $request, string $driverId)
+    {
+        $data = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+            'mapon_driver_id' => 'required|string|max:64',
+            'mapon_name' => 'nullable|string|max:191',
+        ]);
+
+        DriverMaponLink::updateOrCreate(
+            ['user_id' => $data['user_id'], 'imi_driver_id' => $driverId],
+            ['mapon_driver_id' => $data['mapon_driver_id'], 'mapon_name' => $data['mapon_name'] ?? null],
+        );
+
+        return redirect()->route('admin.tacho-activity.index', ['user_id' => $data['user_id']])
+            ->with('success', 'Linked driver to MAPON — the report will use this mapping from now on.');
+    }
+
+    /**
+     * Remove a previously saved manual link so the driver falls back to automatic matching.
+     */
+    public function unlinkDriver(Request $request, string $driverId)
+    {
+        $userId = (int) $request->input('user_id', 0);
+        if ($userId > 0) {
+            DriverMaponLink::where('user_id', $userId)->where('imi_driver_id', $driverId)->delete();
+        }
+        return redirect()->route('admin.tacho-activity.index', ['user_id' => $userId])
+            ->with('success', 'Removed manual MAPON link for driver.');
+    }
+
     public function index(Request $request)
     {
         $apiUsers = User::whereNotNull('api_key')
@@ -145,14 +180,24 @@ class TachoActivityController extends Controller
         // 2. All declarations → map driver name → list of active (SUBMITTED, endDate >= today) countries.
         $activeByName = $this->activeCountriesByDriverName($todayStr);
 
+        // 2b. Load any manual IMI → MAPON links persisted via "Accept suggestion".
+        //     These take priority over name matching.
+        $manualLinks = DriverMaponLink::where('user_id', $userId)
+            ->pluck('mapon_driver_id', 'imi_driver_id')
+            ->toArray();
+
         // 3. MAPON drivers → normalized full name → mapon driver record.
         // Normalization strips diacritics + lowercases + collapses whitespace so that
         // "Aidas Vaičius" (MAPON) matches "AIDAS VAICIUS" (IMI).
         // Also keep a parallel list indexed by name tokens for fuzzy subset matching
         // (handles middle names like IMI "Arnel Molino" ↔ MAPON "Arnel Fernandez Molino").
         $maponByName = [];
+        $maponById = [];
         $maponAll = []; // [['name' => 'arnel fernandez molino', 'tokens' => [...], 'driver' => [...]], ...]
         foreach ($this->maponService->listDrivers() as $m) {
+            $id = $m['id'] ?? $m['driver_id'] ?? null;
+            if ($id !== null) $maponById[(string) $id] = $m;
+
             $name = $this->maponDriverName($m);
             if ($name === '') continue;
             $normalized = $this->normalizeName($name);
@@ -176,10 +221,28 @@ class TachoActivityController extends Controller
             if (empty($activeCountries)) continue; // only drivers WITH active declarations
             $stats['checked']++;
 
-            $maponDriver = $maponByName[$key] ?? null;
-            $matchKind = $maponDriver ? 'exact' : null;
+            // Match priority:
+            //   1. Manual link saved via "Accept suggestion" (overrides everything)
+            //   2. Exact normalized-name match
+            //   3. Subset match (all IMI tokens appear in a MAPON name)
+            $imiDriverId = (string) ($driver['driverId'] ?? '');
+            $maponDriver = null;
+            $matchKind = null;
 
-            // Fuzzy fallback 1 — subset match. Every IMI token is contained in the MAPON
+            if ($imiDriverId !== '' && isset($manualLinks[$imiDriverId])) {
+                $linkedId = (string) $manualLinks[$imiDriverId];
+                if (isset($maponById[$linkedId])) {
+                    $maponDriver = $maponById[$linkedId];
+                    $matchKind = 'manual';
+                }
+            }
+
+            if (!$maponDriver) {
+                $maponDriver = $maponByName[$key] ?? null;
+                if ($maponDriver) $matchKind = 'exact';
+            }
+
+            // Fuzzy fallback — subset match. Every IMI token is contained in the MAPON
             // token list. Covers middle-name differences like "ARNEL MOLINO" ↔ "Arnel Fernandez Molino".
             if (!$maponDriver) {
                 $imiTokens = array_filter(explode(' ', $key));
@@ -357,13 +420,16 @@ class TachoActivityController extends Controller
 
             $candidates[] = [
                 'display' => $cand['display'],
-                'driver' => $cand['driver'],
+                'mapon_driver_id' => (string) ($cand['driver']['id'] ?? $cand['driver']['driver_id'] ?? ''),
                 'score' => $dist - ($sharedTokens * 3), // lower is better; token overlap wins
             ];
         }
 
         usort($candidates, fn($a, $b) => $a['score'] <=> $b['score']);
-        return array_slice($candidates, 0, $max);
+        return array_values(array_filter(
+            array_slice($candidates, 0, $max),
+            fn($c) => $c['mapon_driver_id'] !== '',
+        ));
     }
 
     /**

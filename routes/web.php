@@ -196,6 +196,10 @@ Route::middleware(['auth'])->group(function () {
             ->name('tacho-activity.index');
         Route::post('tacho-activity/{driverId}/withdraw', [\App\Http\Controllers\Admin\TachoActivityController::class, 'withdrawDriver'])
             ->name('tacho-activity.withdraw');
+        Route::post('tacho-activity/{driverId}/link', [\App\Http\Controllers\Admin\TachoActivityController::class, 'linkDriver'])
+            ->name('tacho-activity.link');
+        Route::post('tacho-activity/{driverId}/unlink', [\App\Http\Controllers\Admin\TachoActivityController::class, 'unlinkDriver'])
+            ->name('tacho-activity.unlink');
 
         // Group Management Routes
         Route::post('groups', [UserGroupController::class, 'store'])->name('groups.store');
