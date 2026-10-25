@@ -148,11 +148,21 @@ class TachoActivityController extends Controller
         // 3. MAPON drivers → normalized full name → mapon driver record.
         // Normalization strips diacritics + lowercases + collapses whitespace so that
         // "Aidas Vaičius" (MAPON) matches "AIDAS VAICIUS" (IMI).
+        // Also keep a parallel list indexed by name tokens for fuzzy subset matching
+        // (handles middle names like IMI "Arnel Molino" ↔ MAPON "Arnel Fernandez Molino").
         $maponByName = [];
+        $maponAll = []; // [['name' => 'arnel fernandez molino', 'tokens' => [...], 'driver' => [...]], ...]
         foreach ($this->maponService->listDrivers() as $m) {
             $name = $this->maponDriverName($m);
             if ($name === '') continue;
-            $maponByName[$this->normalizeName($name)] = $m;
+            $normalized = $this->normalizeName($name);
+            $maponByName[$normalized] = $m;
+            $maponAll[] = [
+                'name' => $normalized,
+                'display' => $name,
+                'tokens' => array_filter(explode(' ', $normalized)),
+                'driver' => $m,
+            ];
         }
 
         $rows = [];
@@ -167,14 +177,38 @@ class TachoActivityController extends Controller
             $stats['checked']++;
 
             $maponDriver = $maponByName[$key] ?? null;
+            $matchKind = $maponDriver ? 'exact' : null;
+
+            // Fuzzy fallback 1 — subset match. Every IMI token is contained in the MAPON
+            // token list. Covers middle-name differences like "ARNEL MOLINO" ↔ "Arnel Fernandez Molino".
+            if (!$maponDriver) {
+                $imiTokens = array_filter(explode(' ', $key));
+                if (count($imiTokens) >= 2) { // need at least first + last to be reliable
+                    foreach ($maponAll as $cand) {
+                        if (empty(array_diff($imiTokens, $cand['tokens']))) {
+                            $maponDriver = $cand['driver'];
+                            $matchKind = 'subset';
+                            break;
+                        }
+                    }
+                }
+            }
+
             $maponId = $maponDriver ? ($maponDriver['id'] ?? $maponDriver['driver_id'] ?? null) : null;
 
             if (!$maponId) {
+                // Build up to 3 "did you mean?" suggestions by Levenshtein distance
+                // on the normalized name. Threshold scales with length so short names
+                // aren't matched by chance.
+                $suggestions = $this->findNameSuggestions($key, $maponAll, 3);
+
                 $rows[] = [
                     'name' => $fullName,
                     'driver_id' => $driver['driverId'] ?? null,
                     'active_countries' => $activeCountries,
                     'mapon_matched' => false,
+                    'match_kind' => null,
+                    'suggestions' => $suggestions,
                     'last_activity' => null,
                     'days_since' => null,
                     'status' => 'no_mapon',
@@ -203,6 +237,9 @@ class TachoActivityController extends Controller
                 'driver_id' => $driver['driverId'] ?? null,
                 'active_countries' => $activeCountries,
                 'mapon_matched' => true,
+                'match_kind' => $matchKind,
+                'mapon_name' => $this->maponDriverName($maponDriver),
+                'suggestions' => [],
                 'last_activity' => $lastActivity,
                 'days_since' => $daysSince,
                 'status' => $isStale ? 'stale' : 'active',
@@ -291,6 +328,42 @@ class TachoActivityController extends Controller
         $ascii = preg_replace('/[^A-Za-z\s]/', '', $ascii);
         $ascii = preg_replace('/\s+/', ' ', $ascii);
         return strtolower(trim($ascii));
+    }
+
+    /**
+     * Find up to $max MAPON drivers whose name is "close" to the needle (IMI normalized name),
+     * ranked by Levenshtein distance. Used to suggest likely matches on the "Not in MAPON"
+     * rows so the admin can see "did you mean …?" instead of a dead end.
+     *
+     * Rules:
+     *   - Discard anything whose distance is > max(2, floor(len/4)) — avoids random matches.
+     *   - Also surface candidates that share ≥1 full-token overlap (prefix like "arnel …")
+     *     because token overlap is a stronger signal than character distance alone.
+     */
+    private function findNameSuggestions(string $needle, array $maponAll, int $max): array
+    {
+        $needleTokens = array_filter(explode(' ', $needle));
+        if (empty($needleTokens)) return [];
+        $len = strlen($needle);
+        $distThreshold = max(2, (int) floor($len / 4));
+
+        $candidates = [];
+        foreach ($maponAll as $cand) {
+            $sharedTokens = count(array_intersect($needleTokens, $cand['tokens']));
+            $dist = levenshtein($needle, $cand['name']);
+
+            // Keep if any strong signal: shared token OR tight edit distance.
+            if ($sharedTokens === 0 && $dist > $distThreshold) continue;
+
+            $candidates[] = [
+                'display' => $cand['display'],
+                'driver' => $cand['driver'],
+                'score' => $dist - ($sharedTokens * 3), // lower is better; token overlap wins
+            ];
+        }
+
+        usort($candidates, fn($a, $b) => $a['score'] <=> $b['score']);
+        return array_slice($candidates, 0, $max);
     }
 
     /**

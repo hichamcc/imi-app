@@ -123,8 +123,20 @@
                                     <td class="px-4 py-3 align-top">
                                         @if($row['mapon_matched'])
                                             <span class="inline-flex px-2 py-0.5 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">{{ __('Yes') }}</span>
+                                            @if(($row['match_kind'] ?? null) === 'subset')
+                                                <span class="inline-flex px-1.5 py-0.5 text-[10px] rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 ml-1" title="{{ __('Fuzzy match: all IMI name tokens appear in the MAPON name') }}">fuzzy</span>
+                                                <div class="text-[11px] text-gray-500 mt-1">{{ __('via') }}: {{ $row['mapon_name'] ?? '' }}</div>
+                                            @endif
                                         @else
                                             <span class="inline-flex px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">{{ __('No') }}</span>
+                                            @if(!empty($row['suggestions']))
+                                                <div class="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
+                                                    {{ __('Did you mean') }}?
+                                                    @foreach($row['suggestions'] as $sug)
+                                                        <div class="truncate" title="{{ $sug['display'] }}">· {{ $sug['display'] }}</div>
+                                                    @endforeach
+                                                </div>
+                                            @endif
                                         @endif
                                     </td>
                                     <td class="px-4 py-3 align-top">
