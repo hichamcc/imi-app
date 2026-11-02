@@ -78,6 +78,70 @@ class MaponService
     }
 
     /**
+     * Fetch every vehicle (unit) in the MAPON account. Used to resolve a truck plate
+     * number → MAPON unitId so we can filter driver activities by the specific vehicle.
+     *
+     * Returns an array of unit records; caller should pull `number` (plate) and `unit_id`
+     * (or `id`) from each. Shape varies by tenant — this helper tolerates both the
+     * common `data.units` wrapper and bare arrays.
+     */
+    public function listUnits(): array
+    {
+        $raw = $this->get('unit/list');
+        $data = $raw['data'] ?? $raw;
+
+        if (isset($data['units']) && is_array($data['units'])) return $data['units'];
+        if (is_array($data) && isset($data[0]) && is_array($data[0])) return $data;
+        return [];
+    }
+
+    /**
+     * Return the set of MAPON unit IDs the given driver had DRIVING activity on today
+     * (server local date). Used by the external wttsystem.dk endpoint to recognise a
+     * driver who drove the truck earlier today but was then unassigned.
+     *
+     * Rules match the Tacho Activity report:
+     *   - Only `DRIVING` status counts (not WORK / AVAILABLE / REST).
+     *   - Must have end > start (ignore zero-length events).
+     *   - Timestamps are Unix seconds; the "today" window is the server local date
+     *     converted to UTC bounds so an activity straddling midnight is handled correctly.
+     */
+    public function drivingUnitIdsToday($driverId, string $tz = 'Europe/Copenhagen'): array
+    {
+        $todayLocal = new \DateTimeImmutable('today', new \DateTimeZone($tz));
+        $tomorrowLocal = $todayLocal->modify('+1 day');
+
+        $fromIso = $todayLocal->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
+        $tillIso = $tomorrowLocal->setTimezone(new \DateTimeZone('UTC'))->modify('-1 second')->format('Y-m-d\TH:i:s\Z');
+
+        try {
+            $response = $this->dailyActivities($driverId, $fromIso, $tillIso);
+        } catch (\Throwable $e) {
+            Log::warning('MAPON drivingUnitIdsToday failed', ['driver_id' => $driverId, 'error' => $e->getMessage()]);
+            return [];
+        }
+
+        $days = isset($response['activities']) ? [$response] : array_values(array_filter($response, 'is_array'));
+
+        $units = [];
+        foreach ($days as $day) {
+            foreach (($day['activities'] ?? []) as $a) {
+                $status = strtoupper(trim((string) ($a['status'] ?? '')));
+                $start = (int) ($a['start'] ?? 0);
+                $end = (int) ($a['end'] ?? 0);
+                $unitId = $a['unitId'] ?? $a['unit_id'] ?? null;
+
+                if ($status !== 'DRIVING') continue;
+                if ($end <= $start) continue;
+                if ($unitId === null) continue;
+
+                $units[(string) $unitId] = true;
+            }
+        }
+        return array_keys($units);
+    }
+
+    /**
      * Get daily activity intervals for a single driver.
      *
      * IMPORTANT (from the sister tacho app's hard-won experience):

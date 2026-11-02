@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Truck;
+use App\Models\TruckAssignment;
 use App\Models\User;
 use App\Services\DeclarationService;
 use App\Services\DriverService;
+use App\Services\MaponService;
 use App\Services\PostingApiService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +29,7 @@ class TruckDeclarationsController extends Controller
         protected PostingApiService $apiService,
         protected DriverService $driverService,
         protected DeclarationService $declarationService,
+        protected MaponService $maponService,
     ) {}
 
     public function lookup(Request $request): JsonResponse
@@ -86,9 +89,31 @@ class TruckDeclarationsController extends Controller
             ], 404);
         }
 
-        // 4. Fetch active SUBMITTED declarations for this driver (end_date >= today).
         $driverId = $driver['driverId'];
         $today = Carbon::today()->format('Y-m-d');
+
+        // 3b. Gate: driver must be CURRENTLY assigned to this truck, OR have driven
+        //     this exact truck earlier today according to MAPON tacho data. Rejects
+        //     anyone else even if they're in the owner's IMI roster.
+        $assignedNow = TruckAssignment::where('truck_id', $truck->id)
+            ->where('driver_id', $driverId)
+            ->where('is_active', true)
+            ->exists();
+
+        $assignedToday = $assignedNow;
+        if (!$assignedNow) {
+            $assignedToday = $this->droveTruckToday($driverName, $truck->plate);
+        }
+
+        if (!$assignedToday) {
+            return response()->json([
+                'error' => 'driver_not_found',
+                'message' => "Driver \"{$driverName}\" is not currently assigned to {$truck->plate} and did not drive it today.",
+                'company' => $owner->name,
+            ], 404);
+        }
+
+        // 4. Fetch active SUBMITTED declarations for this driver (end_date >= today).
 
         try {
             $active = $this->fetchActiveDeclarationsForDriver($driverId, $today);
@@ -137,8 +162,92 @@ class TruckDeclarationsController extends Controller
                 'name' => trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')),
                 'dateOfBirth' => $driver['driverDateOfBirth'] ?? null,
             ],
+            'assigned_now' => $assignedNow, // true: current assignment; false: matched via today's MAPON activity
             'declarations' => $declarations,
         ]);
+    }
+
+    /**
+     * MAPON-based fallback: did $driverName have any DRIVING activity today on the
+     * MAPON unit whose plate matches $plate? Resolves plate → MAPON unitId via
+     * unit/list, driver name → MAPON driverId via driver/list (same fuzzy matcher
+     * the Tacho Activity report uses), then calls drivingUnitIdsToday.
+     * Returns false on any lookup failure — fail-closed, not fail-open.
+     */
+    private function droveTruckToday(string $driverName, string $plate): bool
+    {
+        if (!$this->maponService->isConfigured()) return false;
+
+        try {
+            // 1. Plate → MAPON unitId. Normalise plate (strip spaces, uppercase) on both sides.
+            $target = $this->normalisePlate($plate);
+            $unitId = null;
+            foreach ($this->maponService->listUnits() as $unit) {
+                $cand = $this->normalisePlate((string) ($unit['number'] ?? $unit['plate_number'] ?? $unit['plate'] ?? ''));
+                if ($cand === '' || $cand !== $target) continue;
+                $unitId = $unit['unit_id'] ?? $unit['id'] ?? null;
+                if ($unitId !== null) break;
+            }
+            if ($unitId === null) {
+                Log::info('MAPON fallback: plate not found in unit/list', ['plate' => $plate]);
+                return false;
+            }
+
+            // 2. Driver name → MAPON driver id. Same matcher as the admin Tacho report:
+            //    normalise (strip diacritics, lowercase, collapse whitespace), then
+            //    try exact then subset-of-tokens.
+            $needle = $this->normaliseName($driverName);
+            $needleTokens = array_filter(explode(' ', $needle));
+            $maponDriverId = null;
+            foreach ($this->maponService->listDrivers() as $m) {
+                $first = $m['name'] ?? $m['first_name'] ?? $m['firstname'] ?? '';
+                $last = $m['surname'] ?? $m['last_name'] ?? $m['lastname'] ?? '';
+                $cand = $this->normaliseName(trim("{$first} {$last}"));
+                if ($cand === '') continue;
+
+                if ($cand === $needle) {
+                    $maponDriverId = $m['id'] ?? $m['driver_id'] ?? null;
+                    if ($maponDriverId !== null) break;
+                }
+                if ($maponDriverId === null && count($needleTokens) >= 2) {
+                    $candTokens = array_filter(explode(' ', $cand));
+                    if (empty(array_diff($needleTokens, $candTokens))) {
+                        $maponDriverId = $m['id'] ?? $m['driver_id'] ?? null;
+                    }
+                }
+            }
+            if ($maponDriverId === null) {
+                Log::info('MAPON fallback: driver name not found', ['driver_name' => $driverName]);
+                return false;
+            }
+
+            // 3. Any DRIVING activity today on that unit?
+            $drivenUnitIds = $this->maponService->drivingUnitIdsToday($maponDriverId);
+            return in_array((string) $unitId, $drivenUnitIds, true);
+        } catch (\Throwable $e) {
+            Log::warning('MAPON fallback failed', ['driver_name' => $driverName, 'plate' => $plate, 'error' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+    private function normalisePlate(string $plate): string
+    {
+        return strtoupper(preg_replace('/\s+/', '', $plate));
+    }
+
+    private function normaliseName(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') return '';
+        $prev = setlocale(LC_CTYPE, 0);
+        setlocale(LC_CTYPE, 'en_US.UTF-8', 'C.UTF-8', 'C');
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name);
+        setlocale(LC_CTYPE, $prev);
+        if ($ascii === false || $ascii === null) $ascii = $name;
+        $ascii = preg_replace('/[-_.]/', ' ', $ascii);
+        $ascii = preg_replace('/[^A-Za-z\s]/', '', $ascii);
+        $ascii = preg_replace('/\s+/', ' ', $ascii);
+        return strtolower(trim($ascii));
     }
 
     /**
