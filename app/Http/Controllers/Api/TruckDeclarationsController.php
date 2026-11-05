@@ -39,133 +39,161 @@ class TruckDeclarationsController extends Controller
 
         $plate = strtoupper(preg_replace('/\s+/', '', $validated['plate']));
         $driverName = trim($validated['driver_name']);
+        $today = Carbon::today()->format('Y-m-d');
 
-        // 1. Resolve plate → company (owning user).
-        $truck = Truck::whereRaw('UPPER(REPLACE(plate, " ", "")) = ?', [$plate])->first();
-        if (!$truck) {
+        // 1. Resolve plate → candidate companies. A plate can be registered in
+        //    multiple companies' local `trucks` tables (subcontracting, truck
+        //    transferred between orgs, etc.), so we try each until one yields
+        //    this driver + active declaration.
+        $trucks = Truck::whereRaw('UPPER(REPLACE(plate, " ", "")) = ?', [$plate])->get();
+        if ($trucks->isEmpty()) {
             return response()->json([
                 'error' => 'plate_not_found',
                 'message' => "No truck with plate {$plate} is registered in any company.",
             ], 404);
         }
 
-        $owner = User::find($truck->user_id);
-        if (!$owner || !$owner->hasValidApiCredentials()) {
+        $attempts = [];           // per-company diagnostic trail, for both logs and 404 message
+        $checkedOwners = [];      // names of companies we actually tried (had valid creds)
+
+        foreach ($trucks as $truck) {
+            $owner = User::find($truck->user_id);
+            if (!$owner || !$owner->hasValidApiCredentials()) {
+                $attempts[] = ['owner' => $owner?->name, 'reason' => 'no_credentials'];
+                continue;
+            }
+            $checkedOwners[] = $owner->name;
+
+            // Switch the shared PostingApiService singleton to this owning org.
+            $this->apiService->setUserCredentials(
+                $owner->api_base_url,
+                $owner->api_key,
+                $owner->api_operator_id,
+            );
+
+            try {
+                $driver = $this->findDriverByName($driverName);
+            } catch (\Throwable $e) {
+                Log::warning('Truck declarations lookup — driver fetch failed', [
+                    'plate' => $plate,
+                    'owner_user_id' => $owner->id,
+                    'error' => $e->getMessage(),
+                ]);
+                $attempts[] = ['owner' => $owner->name, 'reason' => 'driver_fetch_failed', 'error' => $e->getMessage()];
+                continue;
+            }
+
+            if (!$driver) {
+                $attempts[] = ['owner' => $owner->name, 'reason' => 'driver_not_in_roster'];
+                continue;
+            }
+
+            $driverId = $driver['driverId'];
+
+            // Gate — accept via EITHER current assignment OR plate-in-active-declaration.
+            $assignedNow = TruckAssignment::where('truck_id', $truck->id)
+                ->where('driver_id', $driverId)
+                ->where('is_active', true)
+                ->exists();
+
+            try {
+                $active = $this->fetchActiveDeclarationsForDriver($driver, $today);
+            } catch (\Throwable $e) {
+                Log::warning('Truck declarations lookup — declarations fetch failed', [
+                    'driver_id' => $driverId,
+                    'owner' => $owner->name,
+                    'error' => $e->getMessage(),
+                ]);
+                $attempts[] = ['owner' => $owner->name, 'reason' => 'declarations_fetch_failed', 'error' => $e->getMessage()];
+                continue;
+            }
+
+            $matchedVia = null;
+            if ($assignedNow) {
+                $matchedVia = 'current_assignment';
+            } elseif ($this->anyActiveDeclarationCoversPlate($active, $plate)) {
+                $matchedVia = 'declaration_plate';
+            }
+
+            if ($matchedVia === null) {
+                $attempts[] = [
+                    'owner' => $owner->name,
+                    'reason' => 'driver_not_assigned_to_truck',
+                    'active_submitted' => count($active),
+                ];
+                continue;
+            }
+
+            // Success — build the response in this org's context.
+            $ids = array_map(fn ($d) => $d['declarationId'], $active);
+            $printResults = $this->declarationService->printDeclarationsConcurrent($ids, 'en');
+
+            $declarations = [];
+            foreach ($active as $d) {
+                $id = $d['declarationId'];
+                $declarations[] = [
+                    'declarationId' => $id,
+                    'country' => strtoupper($d['declarationPostingCountry'] ?? ''),
+                    'startDate' => $d['declarationStartDate'] ?? null,
+                    'endDate' => $d['declarationEndDate'] ?? null,
+                    'pdfUrl' => $printResults[$id]['url'] ?? null,
+                ];
+            }
+            usort($declarations, fn ($a, $b) => strcmp($a['country'], $b['country']));
+
+            Log::info('TruckDeclarations: matched', [
+                'plate' => $plate,
+                'owner' => $owner->name,
+                'matched_via' => $matchedVia,
+                'skipped_attempts' => $attempts,
+            ]);
+
+            return response()->json([
+                'company' => $owner->name,
+                'truck' => ['plate' => $truck->plate],
+                'driver' => [
+                    'driverId' => $driverId,
+                    'name' => trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')),
+                    'dateOfBirth' => $driver['driverDateOfBirth'] ?? null,
+                ],
+                'assigned_now' => $assignedNow,
+                'matched_via' => $matchedVia,
+                'declarations' => $declarations,
+            ]);
+        }
+
+        // Fell through — no company matched.
+        if (empty($checkedOwners)) {
             return response()->json([
                 'error' => 'owner_misconfigured',
-                'message' => 'The owning company has no valid IMI API credentials.',
+                'message' => "Plate {$plate} is registered but no owning company has valid IMI API credentials.",
             ], 500);
         }
 
-        // 2. Switch the shared PostingApiService singleton to the owning org.
-        $this->apiService->setUserCredentials(
-            $owner->api_base_url,
-            $owner->api_key,
-            $owner->api_operator_id,
-        );
+        // Pick a 4xx code from the attempts. If every attempt was "not in roster"
+        // we return driver_not_found; otherwise driver_not_assigned_to_truck.
+        $allDriverNotInRoster = !empty($attempts) && collect($attempts)
+            ->every(fn ($a) => ($a['reason'] ?? null) === 'driver_not_in_roster');
 
-        // 3. Find the driver by name (paginate /drivers, exact match on first+last).
-        try {
-            $driver = $this->findDriverByName($driverName);
-        } catch (\Throwable $e) {
-            Log::warning('Truck declarations lookup — driver fetch failed', [
-                'plate' => $plate,
-                'owner_user_id' => $owner->id,
-                'error' => $e->getMessage(),
-            ]);
-            return response()->json([
-                'error' => 'driver_lookup_failed',
-                'message' => $e->getMessage(),
-            ], 502);
-        }
+        Log::info('TruckDeclarations: no match across all owning companies', [
+            'plate' => $plate,
+            'driver' => $driverName,
+            'attempts' => $attempts,
+        ]);
 
-        if (!$driver) {
+        if ($allDriverNotInRoster) {
             return response()->json([
                 'error' => 'driver_not_found',
-                'message' => "No driver named \"{$driverName}\" found in company \"{$owner->name}\".",
-                'company' => $owner->name,
+                'message' => "No driver named \"{$driverName}\" found in any company registered for {$plate}.",
+                'companies_checked' => $checkedOwners,
             ], 404);
         }
-
-        $driverId = $driver['driverId'];
-        $today = Carbon::today()->format('Y-m-d');
-
-        // 3b. Gate — accept the driver via either of two paths, in order:
-        //   1) currently assigned to this truck (TruckAssignment.is_active = true)
-        //   2) has an active SUBMITTED declaration that lists this plate
-        // Rejects anyone else even if they're in the owner's IMI roster.
-        $assignedNow = TruckAssignment::where('truck_id', $truck->id)
-            ->where('driver_id', $driverId)
-            ->where('is_active', true)
-            ->exists();
-
-        $matchedVia = $assignedNow ? 'current_assignment' : null;
-
-        // Fetch active SUBMITTED declarations (needed for both the plate-in-decl
-        // fallback and the success response body).
-        try {
-            $active = $this->fetchActiveDeclarationsForDriver($driver, $today);
-        } catch (\Throwable $e) {
-            Log::warning('Truck declarations lookup — declarations fetch failed', [
-                'driver_id' => $driverId,
-                'error' => $e->getMessage(),
-            ]);
-            return response()->json([
-                'error' => 'declarations_fetch_failed',
-                'message' => $e->getMessage(),
-            ], 502);
-        }
-
-        // The /declarations LIST response doesn't include plate arrays — only the
-        // per-declaration /declarations/{id} DETAIL does. So for the plate-match gate
-        // we fetch details on demand, stopping at the first match.
-        if ($matchedVia === null && $this->anyActiveDeclarationCoversPlate($active, $plate)) {
-            $matchedVia = 'declaration_plate';
-        }
-
-        if ($matchedVia === null) {
-            return response()->json([
-                'error' => 'driver_not_assigned_to_truck',
-                'message' => "Driver \"{$driverName}\" is not currently assigned to {$truck->plate} and has no active declaration listing it.",
-                'company' => $owner->name,
-            ], 404);
-        }
-
-        // 5. Generate English PDF URL per declaration (RTPD /print returns a signed URL).
-        //    Done concurrently via Guzzle Pool — serial was the main cause of the 30s
-        //    timeout when a driver had 20+ active declarations.
-        $ids = array_map(fn ($d) => $d['declarationId'], $active);
-        $printResults = $this->declarationService->printDeclarationsConcurrent($ids, 'en');
-
-        $declarations = [];
-        foreach ($active as $d) {
-            $id = $d['declarationId'];
-            $pdfUrl = $printResults[$id]['url'] ?? null;
-
-            $declarations[] = [
-                'declarationId' => $id,
-                'country' => strtoupper($d['declarationPostingCountry'] ?? ''),
-                'startDate' => $d['declarationStartDate'] ?? null,
-                'endDate' => $d['declarationEndDate'] ?? null,
-                'pdfUrl' => $pdfUrl,
-            ];
-        }
-
-        // Sort by country for consistent output
-        usort($declarations, fn($a, $b) => strcmp($a['country'], $b['country']));
 
         return response()->json([
-            'company' => $owner->name,
-            'truck' => ['plate' => $truck->plate],
-            'driver' => [
-                'driverId' => $driverId,
-                'name' => trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')),
-                'dateOfBirth' => $driver['driverDateOfBirth'] ?? null,
-            ],
-            'assigned_now' => $assignedNow,       // true: current assignment; false: matched via declaration plate list
-            'matched_via' => $matchedVia,         // current_assignment | declaration_plate
-            'declarations' => $declarations,
-        ]);
+            'error' => 'driver_not_assigned_to_truck',
+            'message' => "Driver \"{$driverName}\" is not currently assigned to {$plate} and has no active declaration listing it in any company.",
+            'companies_checked' => $checkedOwners,
+        ], 404);
     }
 
     private function normalisePlate(string $plate): string
