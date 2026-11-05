@@ -189,21 +189,46 @@ class TruckDeclarationsController extends Controller
         if ($target === '') return false;
 
         $ids = array_values(array_filter(array_map(fn ($d) => $d['declarationId'] ?? null, $activeDeclarations)));
-        if (empty($ids)) return false;
+        if (empty($ids)) {
+            Log::info('TruckDeclarations plate check: no active declarations to check', ['plate' => $plate]);
+            return false;
+        }
 
         $details = $this->declarationService->getDeclarationsConcurrent($ids);
 
-        foreach ($details as $detail) {
-            if (!is_array($detail)) continue;
+        // DIAG: summarise plate counts per declaration + whether target appears.
+        $summary = [];
+        $found = false;
+        foreach ($details as $id => $detail) {
+            if (!is_array($detail)) {
+                $summary[$id] = 'fetch_failed';
+                continue;
+            }
+            $allPlates = [];
             foreach (['declarationVehiclePlateNumber', 'declarationVehiclePlateNumberLight', 'declarationVehiclePlateNumberHeavy'] as $field) {
                 foreach ((array) ($detail[$field] ?? []) as $p) {
+                    $allPlates[] = (string) $p;
                     if ($this->normalisePlate((string) $p) === $target) {
-                        return true;
+                        $found = true;
                     }
                 }
             }
+            $summary[$id] = [
+                'country' => $detail['declarationPostingCountry'] ?? null,
+                'plate_count' => count($allPlates),
+                'first_plates' => array_slice($allPlates, 0, 5),
+                'contains_target' => in_array($target, array_map(fn ($p) => $this->normalisePlate($p), $allPlates), true),
+            ];
         }
-        return false;
+
+        Log::info('TruckDeclarations plate check', [
+            'target_plate_normalised' => $target,
+            'checked_declarations' => count($ids),
+            'found' => $found,
+            'summary' => $summary,
+        ]);
+
+        return $found;
     }
 
     private function normaliseName(string $name): string
@@ -260,13 +285,35 @@ class TruckDeclarationsController extends Controller
         );
         $driverDob = $driver['driverDateOfBirth'] ?? null;
 
+        // DIAG: first 3 decl records we scan (what the LIST actually gives us for
+        // name/dob), and every record whose normalised name matched regardless of
+        // status/date.
+        $sampleScanned = [];
+        $byName = [];
+
         $active = [];
+        $totalScanned = 0;
         $startKey = null;
         do {
             $batch = $this->declarationService->getDeclarationsPaginated(250, $startKey);
             foreach ($batch['items'] ?? [] as $d) {
+                $totalScanned++;
+                if (count($sampleScanned) < 3) {
+                    $sampleScanned[] = [
+                        'raw_name' => $d['driverLatinFullName'] ?? null,
+                        'normalised' => $this->normaliseName($d['driverLatinFullName'] ?? ''),
+                        'dob' => $d['driverDateOfBirth'] ?? null,
+                    ];
+                }
                 if ($this->normaliseName($d['driverLatinFullName'] ?? '') !== $driverFullName) continue;
                 if ($driverDob && !empty($d['driverDateOfBirth']) && $d['driverDateOfBirth'] !== $driverDob) continue;
+
+                $byName[] = [
+                    'id' => $d['declarationId'] ?? null,
+                    'status' => $d['declarationStatus'] ?? null,
+                    'end' => $d['declarationEndDate'] ?? null,
+                    'country' => $d['declarationPostingCountry'] ?? null,
+                ];
 
                 $status = strtoupper($d['declarationStatus'] ?? '');
                 $endDate = $d['declarationEndDate'] ?? '';
@@ -276,6 +323,18 @@ class TruckDeclarationsController extends Controller
             }
             $startKey = $batch['lastEvaluatedKey'] ?? null;
         } while ($startKey);
+
+        Log::info('TruckDeclarations: fetched declarations for driver', [
+            'driver_firstlast_raw' => trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')),
+            'driver_fullname_normalised' => $driverFullName,
+            'driver_dob' => $driverDob,
+            'today' => $today,
+            'total_scanned' => $totalScanned,
+            'matched_by_name_dob' => count($byName),
+            'active_submitted' => count($active),
+            'sample_scanned_records' => $sampleScanned,
+            'name_matches' => $byName,
+        ]);
 
         return $active;
     }
