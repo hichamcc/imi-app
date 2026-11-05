@@ -257,19 +257,50 @@ class TruckDeclarationsController extends Controller
         $needle = $this->normaliseName($fullName);
         if ($needle === '') return null;
 
+        $page = 0;
+        $totalScanned = 0;
+        $sampleCandidates = [];
         $startKey = null;
         do {
+            $page++;
+            $pageStart = microtime(true);
             $batch = $this->driverService->getDriversPaginated(250, $startKey);
+            Log::info('TruckDeclarations findDriver: page fetched', [
+                'page' => $page,
+                'ms' => round((microtime(true) - $pageStart) * 1000),
+                'items' => count($batch['items'] ?? []),
+                'has_next' => !empty($batch['lastEvaluatedKey']),
+            ]);
             foreach ($batch['items'] ?? [] as $d) {
+                $totalScanned++;
                 $candidate = $this->normaliseName(
                     ($d['driverLatinFirstName'] ?? '') . ' ' . ($d['driverLatinLastName'] ?? '')
                 );
+                if (count($sampleCandidates) < 5) {
+                    $sampleCandidates[] = [
+                        'raw' => trim(($d['driverLatinFirstName'] ?? '') . ' ' . ($d['driverLatinLastName'] ?? '')),
+                        'normalised' => $candidate,
+                    ];
+                }
                 if ($candidate !== '' && $candidate === $needle) {
+                    Log::info('TruckDeclarations findDriver: matched', [
+                        'driver_id' => $d['driverId'] ?? null,
+                        'needle' => $needle,
+                        'page' => $page,
+                        'total_scanned' => $totalScanned,
+                    ]);
                     return $d;
                 }
             }
             $startKey = $batch['lastEvaluatedKey'] ?? null;
         } while ($startKey);
+
+        Log::info('TruckDeclarations findDriver: NO MATCH', [
+            'needle' => $needle,
+            'pages' => $page,
+            'total_scanned' => $totalScanned,
+            'sample_candidates' => $sampleCandidates,
+        ]);
         return null;
     }
 
