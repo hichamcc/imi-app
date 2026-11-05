@@ -8,7 +8,6 @@ use App\Models\TruckAssignment;
 use App\Models\User;
 use App\Services\DeclarationService;
 use App\Services\DriverService;
-use App\Services\MaponService;
 use App\Services\PostingApiService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -29,7 +28,6 @@ class TruckDeclarationsController extends Controller
         protected PostingApiService $apiService,
         protected DriverService $driverService,
         protected DeclarationService $declarationService,
-        protected MaponService $maponService,
     ) {}
 
     public function lookup(Request $request): JsonResponse
@@ -92,29 +90,19 @@ class TruckDeclarationsController extends Controller
         $driverId = $driver['driverId'];
         $today = Carbon::today()->format('Y-m-d');
 
-        // 3b. Gate: driver must be CURRENTLY assigned to this truck, OR have driven
-        //     this exact truck earlier today according to MAPON tacho data. Rejects
-        //     anyone else even if they're in the owner's IMI roster.
+        // 3b. Gate — accept the driver via either of two paths, in order:
+        //   1) currently assigned to this truck (TruckAssignment.is_active = true)
+        //   2) has an active SUBMITTED declaration that lists this plate
+        // Rejects anyone else even if they're in the owner's IMI roster.
         $assignedNow = TruckAssignment::where('truck_id', $truck->id)
             ->where('driver_id', $driverId)
             ->where('is_active', true)
             ->exists();
 
-        $assignedToday = $assignedNow;
-        if (!$assignedNow) {
-            $assignedToday = $this->droveTruckToday($driverName, $truck->plate);
-        }
+        $matchedVia = $assignedNow ? 'current_assignment' : null;
 
-        if (!$assignedToday) {
-            return response()->json([
-                'error' => 'driver_not_found',
-                'message' => "Driver \"{$driverName}\" is not currently assigned to {$truck->plate} and did not drive it today.",
-                'company' => $owner->name,
-            ], 404);
-        }
-
-        // 4. Fetch active SUBMITTED declarations for this driver (end_date >= today).
-
+        // Fetch active SUBMITTED declarations (needed for both the plate-in-decl
+        // fallback and the success response body).
         try {
             $active = $this->fetchActiveDeclarationsForDriver($driverId, $today);
         } catch (\Throwable $e) {
@@ -126,6 +114,18 @@ class TruckDeclarationsController extends Controller
                 'error' => 'declarations_fetch_failed',
                 'message' => $e->getMessage(),
             ], 502);
+        }
+
+        if ($matchedVia === null && $this->declarationCoversPlate($active, $plate)) {
+            $matchedVia = 'declaration_plate';
+        }
+
+        if ($matchedVia === null) {
+            return response()->json([
+                'error' => 'driver_not_assigned_to_truck',
+                'message' => "Driver \"{$driverName}\" is not currently assigned to {$truck->plate} and has no active declaration listing it.",
+                'company' => $owner->name,
+            ], 404);
         }
 
         // 5. Generate English PDF URL per declaration (RTPD /print returns a signed URL).
@@ -162,77 +162,37 @@ class TruckDeclarationsController extends Controller
                 'name' => trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')),
                 'dateOfBirth' => $driver['driverDateOfBirth'] ?? null,
             ],
-            'assigned_now' => $assignedNow, // true: current assignment; false: matched via today's MAPON activity
+            'assigned_now' => $assignedNow,       // true: current assignment; false: matched via declaration plate list
+            'matched_via' => $matchedVia,         // current_assignment | declaration_plate
             'declarations' => $declarations,
         ]);
-    }
-
-    /**
-     * MAPON-based fallback: did $driverName have any DRIVING activity today on the
-     * MAPON unit whose plate matches $plate? Resolves plate → MAPON unitId via
-     * unit/list, driver name → MAPON driverId via driver/list (same fuzzy matcher
-     * the Tacho Activity report uses), then calls drivingUnitIdsToday.
-     * Returns false on any lookup failure — fail-closed, not fail-open.
-     */
-    private function droveTruckToday(string $driverName, string $plate): bool
-    {
-        if (!$this->maponService->isConfigured()) return false;
-
-        try {
-            // 1. Plate → MAPON unitId. Normalise plate (strip spaces, uppercase) on both sides.
-            $target = $this->normalisePlate($plate);
-            $unitId = null;
-            foreach ($this->maponService->listUnits() as $unit) {
-                $cand = $this->normalisePlate((string) ($unit['number'] ?? $unit['plate_number'] ?? $unit['plate'] ?? ''));
-                if ($cand === '' || $cand !== $target) continue;
-                $unitId = $unit['unit_id'] ?? $unit['id'] ?? null;
-                if ($unitId !== null) break;
-            }
-            if ($unitId === null) {
-                Log::info('MAPON fallback: plate not found in unit/list', ['plate' => $plate]);
-                return false;
-            }
-
-            // 2. Driver name → MAPON driver id. Same matcher as the admin Tacho report:
-            //    normalise (strip diacritics, lowercase, collapse whitespace), then
-            //    try exact then subset-of-tokens.
-            $needle = $this->normaliseName($driverName);
-            $needleTokens = array_filter(explode(' ', $needle));
-            $maponDriverId = null;
-            foreach ($this->maponService->listDrivers() as $m) {
-                $first = $m['name'] ?? $m['first_name'] ?? $m['firstname'] ?? '';
-                $last = $m['surname'] ?? $m['last_name'] ?? $m['lastname'] ?? '';
-                $cand = $this->normaliseName(trim("{$first} {$last}"));
-                if ($cand === '') continue;
-
-                if ($cand === $needle) {
-                    $maponDriverId = $m['id'] ?? $m['driver_id'] ?? null;
-                    if ($maponDriverId !== null) break;
-                }
-                if ($maponDriverId === null && count($needleTokens) >= 2) {
-                    $candTokens = array_filter(explode(' ', $cand));
-                    if (empty(array_diff($needleTokens, $candTokens))) {
-                        $maponDriverId = $m['id'] ?? $m['driver_id'] ?? null;
-                    }
-                }
-            }
-            if ($maponDriverId === null) {
-                Log::info('MAPON fallback: driver name not found', ['driver_name' => $driverName]);
-                return false;
-            }
-
-            // 3. Any DRIVING activity today on that unit?
-            $drivenUnitIds = $this->maponService->drivingUnitIdsToday($maponDriverId);
-            return in_array((string) $unitId, $drivenUnitIds, true);
-        } catch (\Throwable $e) {
-            Log::warning('MAPON fallback failed', ['driver_name' => $driverName, 'plate' => $plate, 'error' => $e->getMessage()]);
-            return false;
-        }
     }
 
     private function normalisePlate(string $plate): string
     {
         return strtoupper(preg_replace('/\s+/', '', $plate));
+    }
+
+    /**
+     * True if any of the driver's active SUBMITTED declarations lists $plate among
+     * its vehicle plates (passenger / light / heavy). Compared plate-normalised
+     * (uppercase, no whitespace) so " ZK9824L " and "zk9824l" both match "ZK9824L".
+     */
+    private function declarationCoversPlate(array $activeDeclarations, string $plate): bool
+    {
+        $target = $this->normalisePlate($plate);
+        if ($target === '') return false;
+
+        foreach ($activeDeclarations as $d) {
+            foreach (['declarationVehiclePlateNumber', 'declarationVehiclePlateNumberLight', 'declarationVehiclePlateNumberHeavy'] as $field) {
+                foreach ((array) ($d[$field] ?? []) as $p) {
+                    if ($this->normalisePlate((string) $p) === $target) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private function normaliseName(string $name): string
@@ -252,17 +212,23 @@ class TruckDeclarationsController extends Controller
 
     /**
      * Paginate /drivers and return the first match for the given full name.
-     * Case/whitespace-insensitive on `firstName + lastName`.
+     * Normalises BOTH sides via normaliseName() (strip accents incl. ø→o, æ→ae, å→a;
+     * lowercase; collapse whitespace), so e.g. "Christian hjortshøj Lauritzen" and
+     * "Christian Hjortshøj  Lauritzen" (double space in stored record) both match.
      */
     private function findDriverByName(string $fullName): ?array
     {
-        $needle = strtolower(trim(preg_replace('/\s+/', ' ', $fullName)));
+        $needle = $this->normaliseName($fullName);
+        if ($needle === '') return null;
+
         $startKey = null;
         do {
             $batch = $this->driverService->getDriversPaginated(250, $startKey);
             foreach ($batch['items'] ?? [] as $d) {
-                $candidate = strtolower(trim(($d['driverLatinFirstName'] ?? '') . ' ' . ($d['driverLatinLastName'] ?? '')));
-                if ($candidate === $needle) {
+                $candidate = $this->normaliseName(
+                    ($d['driverLatinFirstName'] ?? '') . ' ' . ($d['driverLatinLastName'] ?? '')
+                );
+                if ($candidate !== '' && $candidate === $needle) {
                     return $d;
                 }
             }
