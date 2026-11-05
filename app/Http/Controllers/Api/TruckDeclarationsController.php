@@ -255,7 +255,9 @@ class TruckDeclarationsController extends Controller
      */
     private function fetchActiveDeclarationsForDriver(array $driver, string $today): array
     {
-        $driverFullName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
+        $driverFullName = $this->normaliseName(
+            ($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? '')
+        );
         $driverDob = $driver['driverDateOfBirth'] ?? null;
 
         $active = [];
@@ -263,7 +265,7 @@ class TruckDeclarationsController extends Controller
         do {
             $batch = $this->declarationService->getDeclarationsPaginated(250, $startKey);
             foreach ($batch['items'] ?? [] as $d) {
-                if (($d['driverLatinFullName'] ?? null) !== $driverFullName) continue;
+                if ($this->normaliseName($d['driverLatinFullName'] ?? '') !== $driverFullName) continue;
                 if ($driverDob && !empty($d['driverDateOfBirth']) && $d['driverDateOfBirth'] !== $driverDob) continue;
 
                 $status = strtoupper($d['declarationStatus'] ?? '');
