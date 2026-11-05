@@ -32,12 +32,6 @@ class TruckDeclarationsController extends Controller
 
     public function lookup(Request $request): JsonResponse
     {
-        $t0 = microtime(true);
-        $tick = function (string $label) use (&$t0) {
-            $elapsed = round((microtime(true) - $t0) * 1000);
-            Log::info("TruckDeclarations TIMING {$label}", ['ms_since_start' => $elapsed]);
-        };
-
         $validated = $request->validate([
             'plate' => 'required|string|max:32',
             'driver_name' => 'required|string|max:255',
@@ -70,12 +64,9 @@ class TruckDeclarationsController extends Controller
             $owner->api_operator_id,
         );
 
-        $tick('after_set_credentials');
-
         // 3. Find the driver by name (paginate /drivers, exact match on first+last).
         try {
             $driver = $this->findDriverByName($driverName);
-            $tick('after_find_driver');
         } catch (\Throwable $e) {
             Log::warning('Truck declarations lookup — driver fetch failed', [
                 'plate' => $plate,
@@ -114,7 +105,6 @@ class TruckDeclarationsController extends Controller
         // fallback and the success response body).
         try {
             $active = $this->fetchActiveDeclarationsForDriver($driver, $today);
-            $tick('after_fetch_active_declarations');
         } catch (\Throwable $e) {
             Log::warning('Truck declarations lookup — declarations fetch failed', [
                 'driver_id' => $driverId,
@@ -132,7 +122,6 @@ class TruckDeclarationsController extends Controller
         if ($matchedVia === null && $this->anyActiveDeclarationCoversPlate($active, $plate)) {
             $matchedVia = 'declaration_plate';
         }
-        $tick('after_plate_check');
 
         if ($matchedVia === null) {
             return response()->json([
@@ -147,7 +136,6 @@ class TruckDeclarationsController extends Controller
         //    timeout when a driver had 20+ active declarations.
         $ids = array_map(fn ($d) => $d['declarationId'], $active);
         $printResults = $this->declarationService->printDeclarationsConcurrent($ids, 'en');
-        $tick('after_print_urls');
 
         $declarations = [];
         foreach ($active as $d) {
