@@ -248,12 +248,24 @@ class TruckDeclarationsController extends Controller
         $driverDob = $driver['driverDateOfBirth'] ?? null;
 
         $active = [];
+        $byName = [];   // DIAG: every record whose driverLatinFullName matched, regardless of status/date
         $startKey = null;
         do {
             $batch = $this->declarationService->getDeclarationsPaginated(250, $startKey);
             foreach ($batch['items'] ?? [] as $d) {
                 if (($d['driverLatinFullName'] ?? null) !== $driverFullName) continue;
                 if ($driverDob && !empty($d['driverDateOfBirth']) && $d['driverDateOfBirth'] !== $driverDob) continue;
+
+                $byName[] = [
+                    'id' => $d['declarationId'] ?? null,
+                    'status' => $d['declarationStatus'] ?? null,
+                    'start' => $d['declarationStartDate'] ?? null,
+                    'end' => $d['declarationEndDate'] ?? null,
+                    'country' => $d['declarationPostingCountry'] ?? null,
+                    'plates_passenger' => $d['declarationVehiclePlateNumber'] ?? null,
+                    'plates_light' => $d['declarationVehiclePlateNumberLight'] ?? null,
+                    'plates_heavy' => $d['declarationVehiclePlateNumberHeavy'] ?? null,
+                ];
 
                 $status = strtoupper($d['declarationStatus'] ?? '');
                 $endDate = $d['declarationEndDate'] ?? '';
@@ -263,6 +275,16 @@ class TruckDeclarationsController extends Controller
             }
             $startKey = $batch['lastEvaluatedKey'] ?? null;
         } while ($startKey);
+
+        Log::info('TruckDeclarations: fetched declarations for driver', [
+            'driver_full_name' => $driverFullName,
+            'driver_dob' => $driverDob,
+            'today' => $today,
+            'matched_by_name_dob' => count($byName),
+            'active_submitted' => count($active),
+            'name_matches' => $byName,
+        ]);
+
         return $active;
     }
 }
