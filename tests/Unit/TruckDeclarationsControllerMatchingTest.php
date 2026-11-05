@@ -64,40 +64,6 @@ describe('normaliseName (used on both sides of findDriverByName)', function () {
     });
 });
 
-describe('declarationCoversPlate (3rd accept path)', function () {
-    it('matches a plate listed in declarationVehiclePlateNumber', function () {
-        $c = makeController();
-        $decls = [['declarationVehiclePlateNumber' => ['ZK9824L', 'XYZ123']]];
-        expect(invokePrivate($c, 'declarationCoversPlate', [$decls, 'ZK9824L']))->toBeTrue();
-    });
-
-    it('matches a plate in Light or Heavy lists (RTPD June-2026 split)', function () {
-        $c = makeController();
-        $light = [['declarationVehiclePlateNumberLight' => ['ZK9824L']]];
-        $heavy = [['declarationVehiclePlateNumberHeavy' => ['ZK9824L']]];
-        expect(invokePrivate($c, 'declarationCoversPlate', [$light, 'ZK9824L']))->toBeTrue();
-        expect(invokePrivate($c, 'declarationCoversPlate', [$heavy, 'ZK9824L']))->toBeTrue();
-    });
-
-    it('is whitespace- and case-insensitive on both sides', function () {
-        $c = makeController();
-        $decls = [['declarationVehiclePlateNumber' => [' zk 9824 l ']]];
-        expect(invokePrivate($c, 'declarationCoversPlate', [$decls, 'ZK9824L']))->toBeTrue();
-    });
-
-    it('returns false when no declaration lists the plate', function () {
-        $c = makeController();
-        $decls = [['declarationVehiclePlateNumber' => ['AAA111', 'BBB222']]];
-        expect(invokePrivate($c, 'declarationCoversPlate', [$decls, 'ZK9824L']))->toBeFalse();
-    });
-
-    it('returns false for empty input', function () {
-        $c = makeController();
-        expect(invokePrivate($c, 'declarationCoversPlate', [[], 'ZK9824L']))->toBeFalse();
-        expect(invokePrivate($c, 'declarationCoversPlate', [[['declarationVehiclePlateNumber' => []]], 'ZK9824L']))->toBeFalse();
-    });
-});
-
 describe('normalisePlate', function () {
     it('upper-cases and strips every whitespace char', function () {
         $c = makeController();

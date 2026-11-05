@@ -116,7 +116,10 @@ class TruckDeclarationsController extends Controller
             ], 502);
         }
 
-        if ($matchedVia === null && $this->declarationCoversPlate($active, $plate)) {
+        // The /declarations LIST response doesn't include plate arrays — only the
+        // per-declaration /declarations/{id} DETAIL does. So for the plate-match gate
+        // we fetch details on demand, stopping at the first match.
+        if ($matchedVia === null && $this->anyActiveDeclarationCoversPlate($active, $plate)) {
             $matchedVia = 'declaration_plate';
         }
 
@@ -175,17 +178,33 @@ class TruckDeclarationsController extends Controller
 
     /**
      * True if any of the driver's active SUBMITTED declarations lists $plate among
-     * its vehicle plates (passenger / light / heavy). Compared plate-normalised
-     * (uppercase, no whitespace) so " ZK9824L " and "zk9824l" both match "ZK9824L".
+     * its vehicle plates (passenger / light / heavy).
+     *
+     * IMPORTANT: the /declarations LIST response does NOT include plate arrays —
+     * those live only on the per-declaration /declarations/{id} DETAIL response.
+     * We therefore fetch each declaration's detail on demand and stop at the
+     * first match. Short-circuits mean a plate that's present in the first few
+     * declarations only costs a few API calls.
      */
-    private function declarationCoversPlate(array $activeDeclarations, string $plate): bool
+    private function anyActiveDeclarationCoversPlate(array $activeDeclarations, string $plate): bool
     {
         $target = $this->normalisePlate($plate);
         if ($target === '') return false;
 
         foreach ($activeDeclarations as $d) {
+            $id = $d['declarationId'] ?? null;
+            if (!$id) continue;
+            try {
+                $detail = $this->declarationService->getDeclaration($id);
+            } catch (\Throwable $e) {
+                Log::warning('TruckDeclarations: declaration detail fetch failed, skipping', [
+                    'declaration_id' => $id,
+                    'error' => $e->getMessage(),
+                ]);
+                continue;
+            }
             foreach (['declarationVehiclePlateNumber', 'declarationVehiclePlateNumberLight', 'declarationVehiclePlateNumberHeavy'] as $field) {
-                foreach ((array) ($d[$field] ?? []) as $p) {
+                foreach ((array) ($detail[$field] ?? []) as $p) {
                     if ($this->normalisePlate((string) $p) === $target) {
                         return true;
                     }
@@ -248,24 +267,12 @@ class TruckDeclarationsController extends Controller
         $driverDob = $driver['driverDateOfBirth'] ?? null;
 
         $active = [];
-        $byName = [];   // DIAG: every record whose driverLatinFullName matched, regardless of status/date
         $startKey = null;
         do {
             $batch = $this->declarationService->getDeclarationsPaginated(250, $startKey);
             foreach ($batch['items'] ?? [] as $d) {
                 if (($d['driverLatinFullName'] ?? null) !== $driverFullName) continue;
                 if ($driverDob && !empty($d['driverDateOfBirth']) && $d['driverDateOfBirth'] !== $driverDob) continue;
-
-                $byName[] = [
-                    'id' => $d['declarationId'] ?? null,
-                    'status' => $d['declarationStatus'] ?? null,
-                    'start' => $d['declarationStartDate'] ?? null,
-                    'end' => $d['declarationEndDate'] ?? null,
-                    'country' => $d['declarationPostingCountry'] ?? null,
-                    'plates_passenger' => $d['declarationVehiclePlateNumber'] ?? null,
-                    'plates_light' => $d['declarationVehiclePlateNumberLight'] ?? null,
-                    'plates_heavy' => $d['declarationVehiclePlateNumberHeavy'] ?? null,
-                ];
 
                 $status = strtoupper($d['declarationStatus'] ?? '');
                 $endDate = $d['declarationEndDate'] ?? '';
@@ -275,15 +282,6 @@ class TruckDeclarationsController extends Controller
             }
             $startKey = $batch['lastEvaluatedKey'] ?? null;
         } while ($startKey);
-
-        Log::info('TruckDeclarations: fetched declarations for driver', [
-            'driver_full_name' => $driverFullName,
-            'driver_dob' => $driverDob,
-            'today' => $today,
-            'matched_by_name_dob' => count($byName),
-            'active_submitted' => count($active),
-            'name_matches' => $byName,
-        ]);
 
         return $active;
     }
