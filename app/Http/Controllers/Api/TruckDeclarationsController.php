@@ -104,7 +104,7 @@ class TruckDeclarationsController extends Controller
         // Fetch active SUBMITTED declarations (needed for both the plate-in-decl
         // fallback and the success response body).
         try {
-            $active = $this->fetchActiveDeclarationsForDriver($driverId, $today);
+            $active = $this->fetchActiveDeclarationsForDriver($driver, $today);
         } catch (\Throwable $e) {
             Log::warning('Truck declarations lookup — declarations fetch failed', [
                 'driver_id' => $driverId,
@@ -238,15 +238,23 @@ class TruckDeclarationsController extends Controller
     }
 
     /**
-     * Paginate /declarations filtered by driverId and keep only active SUBMITTED ones.
+     * Paginate /declarations (NO driverId filter — the RTPD filter is unreliable for
+     * this use), match by driverLatinFullName + driverDateOfBirth like the driver view
+     * page does, and keep only active SUBMITTED ones.
      */
-    private function fetchActiveDeclarationsForDriver(string $driverId, string $today): array
+    private function fetchActiveDeclarationsForDriver(array $driver, string $today): array
     {
+        $driverFullName = trim(($driver['driverLatinFirstName'] ?? '') . ' ' . ($driver['driverLatinLastName'] ?? ''));
+        $driverDob = $driver['driverDateOfBirth'] ?? null;
+
         $active = [];
         $startKey = null;
         do {
-            $batch = $this->declarationService->getDeclarationsPaginated(250, $startKey, ['driverId' => $driverId]);
+            $batch = $this->declarationService->getDeclarationsPaginated(250, $startKey);
             foreach ($batch['items'] ?? [] as $d) {
+                if (($d['driverLatinFullName'] ?? null) !== $driverFullName) continue;
+                if ($driverDob && !empty($d['driverDateOfBirth']) && $d['driverDateOfBirth'] !== $driverDob) continue;
+
                 $status = strtoupper($d['declarationStatus'] ?? '');
                 $endDate = $d['declarationEndDate'] ?? '';
                 if ($status === 'SUBMITTED' && $endDate >= $today) {
