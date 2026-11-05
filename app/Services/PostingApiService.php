@@ -4,6 +4,8 @@ namespace App\Services;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Pool;
+use GuzzleHttp\Psr7\Request as PsrRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -139,6 +141,53 @@ class PostingApiService
 
             throw $this->handleException($e);
         }
+    }
+
+    /**
+     * Fetch multiple GET endpoints concurrently via Guzzle Pool.
+     *
+     * Returns an associative array keyed by the input endpoint string:
+     *   - on success: the decoded JSON array for that endpoint
+     *   - on failure: null (the caller decides whether to skip or abort)
+     *
+     * Bypasses the response cache (both read and write) — the pool is intended for
+     * batch reads where the cost of a cache miss is already paid by batching.
+     */
+    public function getMany(array $endpoints, int $concurrency = 10): array
+    {
+        $endpoints = array_values(array_unique(array_filter($endpoints)));
+        if (empty($endpoints)) return [];
+
+        $results = [];
+        $requests = function () use ($endpoints) {
+            foreach ($endpoints as $ep) {
+                yield $ep => new PsrRequest('GET', ltrim($ep, '/'), [
+                    'x-api-key' => $this->apiKey,
+                    'x-operator-id' => $this->operatorId,
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ]);
+            }
+        };
+
+        $pool = new Pool($this->client, $requests(), [
+            'concurrency' => $concurrency,
+            'fulfilled' => function ($response, $endpoint) use (&$results) {
+                $body = $response->getBody()->getContents();
+                $decoded = json_decode($body, true);
+                $results[$endpoint] = is_array($decoded) ? $decoded : null;
+            },
+            'rejected' => function ($reason, $endpoint) use (&$results) {
+                $results[$endpoint] = null;
+                Log::warning('PostingApiService::getMany entry failed', [
+                    'endpoint' => $endpoint,
+                    'error' => $reason instanceof \Throwable ? $reason->getMessage() : (string) $reason,
+                ]);
+            },
+        ]);
+
+        $pool->promise()->wait();
+        return $results;
     }
 
     /**

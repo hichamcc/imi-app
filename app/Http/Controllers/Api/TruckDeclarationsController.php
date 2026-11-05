@@ -182,27 +182,22 @@ class TruckDeclarationsController extends Controller
      *
      * IMPORTANT: the /declarations LIST response does NOT include plate arrays —
      * those live only on the per-declaration /declarations/{id} DETAIL response.
-     * We therefore fetch each declaration's detail on demand and stop at the
-     * first match. Short-circuits mean a plate that's present in the first few
-     * declarations only costs a few API calls.
+     * Serial fetches of 20+ declarations exceeded the 30s WTT timeout, so we fire
+     * them concurrently via Guzzle Pool (default concurrency 10). Worst-case total
+     * latency ≈ max single-call latency, not sum.
      */
     private function anyActiveDeclarationCoversPlate(array $activeDeclarations, string $plate): bool
     {
         $target = $this->normalisePlate($plate);
         if ($target === '') return false;
 
-        foreach ($activeDeclarations as $d) {
-            $id = $d['declarationId'] ?? null;
-            if (!$id) continue;
-            try {
-                $detail = $this->declarationService->getDeclaration($id);
-            } catch (\Throwable $e) {
-                Log::warning('TruckDeclarations: declaration detail fetch failed, skipping', [
-                    'declaration_id' => $id,
-                    'error' => $e->getMessage(),
-                ]);
-                continue;
-            }
+        $ids = array_values(array_filter(array_map(fn ($d) => $d['declarationId'] ?? null, $activeDeclarations)));
+        if (empty($ids)) return false;
+
+        $details = $this->declarationService->getDeclarationsConcurrent($ids);
+
+        foreach ($details as $detail) {
+            if (!is_array($detail)) continue;
             foreach (['declarationVehiclePlateNumber', 'declarationVehiclePlateNumberLight', 'declarationVehiclePlateNumberHeavy'] as $field) {
                 foreach ((array) ($detail[$field] ?? []) as $p) {
                     if ($this->normalisePlate((string) $p) === $target) {

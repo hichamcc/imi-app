@@ -38,6 +38,27 @@ class DeclarationService
     }
 
     /**
+     * Fetch multiple declarations by ID concurrently. Returns an associative array
+     * keyed by declarationId; value is the detail array, or null on per-id failure.
+     * Used by the external WTT truck-declarations endpoint where we need to check
+     * ~20 declarations' plate lists inside a 30s timeout.
+     */
+    public function getDeclarationsConcurrent(array $declarationIds, int $concurrency = 10): array
+    {
+        $base = config('posting.endpoints.declarations');
+        $ids = array_values(array_unique(array_filter($declarationIds)));
+        $endpoints = array_map(fn ($id) => $base . '/' . $id, $ids);
+
+        $byEndpoint = $this->apiService->getMany($endpoints, $concurrency);
+
+        $byId = [];
+        foreach ($ids as $id) {
+            $byId[$id] = $byEndpoint[$base . '/' . $id] ?? null;
+        }
+        return $byId;
+    }
+
+    /**
      * Create a new declaration
      */
     public function createDeclaration(array $declarationData): array
