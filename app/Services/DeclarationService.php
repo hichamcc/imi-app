@@ -142,6 +142,27 @@ class DeclarationService
     }
 
     /**
+     * Fire many /print requests concurrently. Returns [declarationId => array|null]
+     * where each array is the post()-style response (likely ['url' => '…']).
+     */
+    public function printDeclarationsConcurrent(array $declarationIds, string $language, int $concurrency = 10): array
+    {
+        $ids = array_values(array_unique(array_filter($declarationIds)));
+        $items = array_map(
+            fn ($id) => ["/declarations/{$id}/print", ['declarationLanguage' => $language]],
+            $ids,
+        );
+
+        $responses = $this->apiService->postMany($items, $concurrency);
+
+        $byId = [];
+        foreach ($ids as $i => $id) {
+            $byId[$id] = $responses[$i] ?? null;
+        }
+        return $byId;
+    }
+
+    /**
      * Get declarations by status
      */
     public function getDeclarationsByStatus(string $status, array $additionalFilters = []): array

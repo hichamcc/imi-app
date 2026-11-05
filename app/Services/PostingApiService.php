@@ -191,6 +191,62 @@ class PostingApiService
     }
 
     /**
+     * Fire several POST requests concurrently via Guzzle Pool.
+     *
+     * $items is an array of [endpoint, jsonBody] pairs. Returns an array in the
+     * SAME ORDER as $items; each entry is the decoded JSON array on success,
+     * ['url' => '…'] when the body is a bare URL (same shape as post()),
+     * or null on per-item failure.
+     */
+    public function postMany(array $items, int $concurrency = 10): array
+    {
+        if (empty($items)) return [];
+
+        $results = array_fill(0, count($items), null);
+        $requests = function () use ($items) {
+            foreach ($items as $idx => [$endpoint, $body]) {
+                yield $idx => new PsrRequest(
+                    'POST',
+                    ltrim($endpoint, '/'),
+                    [
+                        'x-api-key' => $this->apiKey,
+                        'x-operator-id' => $this->operatorId,
+                        'Accept' => 'application/json',
+                        'Content-Type' => 'application/json',
+                    ],
+                    json_encode($body ?? new \stdClass())
+                );
+            }
+        };
+
+        $pool = new Pool($this->client, $requests(), [
+            'concurrency' => $concurrency,
+            'fulfilled' => function ($response, $idx) use (&$results) {
+                $body = $response->getBody()->getContents();
+                $decoded = json_decode($body, true);
+                if ($decoded === null) {
+                    // Same treatment as post(): some endpoints return a bare URL string.
+                    if (!empty($body) && filter_var(trim($body), FILTER_VALIDATE_URL)) {
+                        $decoded = ['url' => trim($body)];
+                    } else {
+                        $decoded = ['success' => true];
+                    }
+                }
+                $results[$idx] = is_array($decoded) ? $decoded : null;
+            },
+            'rejected' => function ($reason, $idx) use (&$results) {
+                Log::warning('PostingApiService::postMany entry failed', [
+                    'index' => $idx,
+                    'error' => $reason instanceof \Throwable ? $reason->getMessage() : (string) $reason,
+                ]);
+            },
+        ]);
+
+        $pool->promise()->wait();
+        return $results;
+    }
+
+    /**
      * Make a POST request to the API
      */
     public function post(string $endpoint, array $data = []): array
